@@ -1,0 +1,65 @@
+App corriendo. Creé la reunión "PRUEBA EN REUNIÓN" programada para las 13:18 (en ~2 minutos).
+
+  Haz lo siguiente:
+  1. Ve a Lista de reuniones
+  2. Abre la reunión "PRUEBA EN REUNIÓN"
+  3. Observa el contador y espera que llegue la hora
+
+  Dime qué muestra el contador y si el botón se activa a las 13:18.
+
+✻ Baked for 52s · 1 shell still running
+
+● Background command "Run agenda app" completed (exit code 0)
+
+● La app se cerró. ¿Pudiste ver el contador y el botón "EN REUNIÓN" antes de que se cerrara? ¿Qué mostró?
+
+wsvkslmjpoarpbly
+
+no ubico la opcion para crear la Contraseña de Aplicación                                                                                                             
+● La forma más rápida es ir directamente con este enlace:
+
+  → myaccount.google.com/apppasswords
+
+  Escríbelo así en el navegador (no busques en Google, escríbelo directo en la barra de direcciones).
+
+  ---
+  Si te pide iniciar sesión, hazlo con tu cuenta Gmail. Luego verás una página que dice "Contraseñas de aplicaciones" con un campo donde escribes un nombre (pon
+  "Agenda") y haces clic en Crear.
+
+  ---
+  Si la página no carga o dice "Esta configuración no está disponible":
+  Significa que la verificación en 2 pasos no está activa aún. Primero actívala aquí:
+
+  → myaccount.google.com/signinoptions/two-step-verification
+
+  Después vuelve al enlace de contraseñas de aplicación.
+
+  ---
+  ¿Qué mensaje te aparece cuando entras a myaccount.google.com/apppasswords?
+
+
+
+**************
+Crear cuenta en GitHub
+
+  1. Ve a https://github.com/signup
+  2. Completa el formulario:
+    - Email: eliasgaytanalvino@gmail.com
+    - Password: una contraseña segura
+    - Username: por ejemplo eliasgt o eliasgtav (este aparecerá en la URL de tus proyectos)
+  3. Resuelve el captcha y clic en Create account
+  4. GitHub te enviará un código de verificación al correo — ingrésalo
+  5. En las preguntas de personalización puedes dar clic en Skip en todo
+
+  ---
+  Cuando tengas la cuenta lista, dime tu nombre de usuario y continuamos con subir el proyecto.
+
+***********
+Perfecto. Cuando retomes, el flujo es:
+
+  1. Crear cuenta en GitHub (quedaste en ese paso)
+  2. Crear repositorio agenda-reuniones
+  3. Subir el proyecto con Git desde PowerShell
+  4. GitHub Actions compila el APK automáticamente
+
+  Todo el código ya está listo con el workflow en .github/workflows/build_apk.yml. Hasta luego.

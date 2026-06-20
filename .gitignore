@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.buildozer/
+bin/
+dist/
+*.db
+*.log
+agenda_config.json
+.env
+.claude/
