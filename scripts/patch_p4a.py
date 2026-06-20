@@ -11,39 +11,30 @@ c = re.sub(r'patches\s*=\s*\[[\s\S]*?\]', 'patches = []', c, count=1)
 open(path, 'w').write(c)
 print('hostpython3 parcheado a 3.12.9')
 
-# python3: cambiar version con reemplazo exacto
+# python3: subclase que fuerza version 3.12.9
+# NOTA: RecipeMeta transforma 'version = ...' en '_version = ...' al definir la clase.
+# La @property 'version' en Recipe retorna self._version, por eso funciona sin setter.
+# NO se puede hacer recipe.version = "..." en instancias (read-only property).
 path = f'{base}/python3/__init__.py'
 c = open(path).read()
 
-# Reemplazo exacto (no regex) para evitar errores
+# Reemplazo exacto de la version en la clase original (por si acaso)
 old_ver = "    version = '3.14.2'"
 new_ver = "    version = '3.12.9'"
 if old_ver in c:
     c = c.replace(old_ver, new_ver, 1)
-    print('python3: reemplazo exacto OK (3.14.2 -> 3.12.9)')
+    print('python3: version reemplazada 3.14.2 -> 3.12.9 (exacto)')
 else:
-    # Fallback con regex mas amplio
     c = re.sub(r"    version = '[0-9.]+'", "    version = '3.12.9'", c, count=1)
-    print('python3: reemplazo por regex (version exacta no encontrada)')
+    print('python3: version reemplazada por regex')
 
-# Override al final: subclase que fuerza version 3.12.9 y cancela patches 3.14
+# Agregar subclase que fuerza version 3.12.9 y omite patches especificos de 3.14
+# RecipeMeta convierte 'version = "3.12.9"' -> '_version = "3.12.9"' automaticamente
 c = c.rstrip('\n') + '\n'
 c += '\nclass _Py312Fix(Python3Recipe):\n'
 c += '    version = "3.12.9"\n'
-c += '    sha512sum = ""\n'
-c += '    patches = []\n'
 c += '    def apply_patches(self, arch, build_dir=None): pass\n'
 c += 'Python3Recipe = _Py312Fix\n'
 c += 'recipe = Python3Recipe()\n'
-c += 'recipe.version = "3.12.9"\n'
 open(path, 'w').write(c)
-
-# Verificacion: mostrar lineas con 'version' y las ultimas 12 lineas
-with open(path) as f:
-    v = f.read()
-ver_lines = [l for l in v.split('\n') if 'version' in l and "'" in l and '3.' in l]
-print(f'Lineas con version en archivo: {ver_lines}')
-print('Ultimas 12 lineas del archivo python3:')
-for line in v.split('\n')[-12:]:
-    print(repr(line))
 print('python3 parcheado a 3.12.9')
