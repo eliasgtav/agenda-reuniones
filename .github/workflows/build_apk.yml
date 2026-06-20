@@ -30,52 +30,40 @@ jobs:
       - name: Instalar buildozer y cython
         run: pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Clonar p4a y parchear Python 3.14 → 3.12.9
+      - name: Pre-clonar p4a y parchear Python 3.14 a 3.12.9
         run: |
-          git clone --depth 1 https://github.com/kivy/python-for-android.git /tmp/p4a
-          python3 << 'PYEOF'
-          import re
+          mkdir -p .buildozer/android/platform
+          git clone --depth 1 https://github.com/kivy/python-for-android.git \
+            .buildozer/android/platform/python-for-android
 
-          def patch_hostpython3():
-              path = '/tmp/p4a/pythonforandroid/recipes/hostpython3/__init__.py'
-              with open(path) as f:
-                  content = f.read()
-              content = re.sub(r"(version\s*=\s*)['\"][\d.]+['\"]", r"\g<1>'3.12.9'", content, count=1)
-              content = re.sub(r"(sha512sum\s*=\s*)['\"][^'\"]*['\"]", r"\g<1>''", content)
-              content = re.sub(r"patches\s*=\s*\[[\s\S]*?\]", "patches = []", content)
-              with open(path, 'w') as f:
-                  f.write(content)
-              print("hostpython3 parcheado a Python 3.12.9")
+          cat > /tmp/patch_p4a.py << 'PYEOF'
+import re
 
-          def patch_python3():
-              path = '/tmp/p4a/pythonforandroid/recipes/python3/__init__.py'
-              with open(path) as f:
-                  content = f.read()
-              content = re.sub(r"(version\s*=\s*)['\"][\d.]+['\"]", r"\g<1>'3.12.9'", content, count=1)
-              content = re.sub(r"(sha512sum\s*=\s*)['\"][^'\"]*['\"]", r"\g<1>''", content)
-              # Agregar override al final para saltear patches incompatibles con 3.12.9
-              override = """
+base = '.buildozer/android/platform/python-for-android/pythonforandroid/recipes'
 
-          class _Python3RecipeFixed(Python3Recipe):
-              version = '3.12.9'
-              sha512sum = ''
-              patches = []
-              def apply_patches(self, arch, build_dir=None):
-                  pass  # patches de 3.14 no aplican a 3.12.9
+# hostpython3: Python 3.14 -> 3.12.9
+path = f'{base}/hostpython3/__init__.py'
+c = open(path).read()
+c = re.sub(r"version = '[0-9.]+'", "version = '3.12.9'", c, count=1)
+c = re.sub(r"sha512sum = '[^']*'", "sha512sum = ''", c)
+c = re.sub(r'patches\s*=\s*\[[\s\S]*?\]', 'patches = []', c, count=1)
+open(path, 'w').write(c)
+print('hostpython3 parcheado a 3.12.9')
 
-          Python3Recipe = _Python3RecipeFixed
-          recipe = Python3Recipe()
-          """
-              content += override
-              with open(path, 'w') as f:
-                  f.write(content)
-              print("python3 parcheado a Python 3.12.9")
+# python3: override version y apply_patches
+path = f'{base}/python3/__init__.py'
+c = open(path).read()
+c = re.sub(r"version = '[0-9.]+'", "version = '3.12.9'", c, count=1)
+c = re.sub(r"sha512sum = '[^']*'", "sha512sum = ''", c)
+c += '\nclass _Py312Fix(Python3Recipe):\n    version = "3.12.9"\n    sha512sum = ""\n    patches = []\n    def apply_patches(self, arch, build_dir=None): pass\nPython3Recipe = _Py312Fix\nrecipe = Python3Recipe()\n'
+open(path, 'w').write(c)
+print('python3 parcheado a 3.12.9')
+PYEOF
+          python3 /tmp/patch_p4a.py
 
-          patch_hostpython3()
-          patch_python3()
-          PYEOF
-          echo "p4a.source_dir = /tmp/p4a" >> buildozer.spec
-          echo "buildozer.spec actualizado con p4a.source_dir"
+          # Apuntar origin a sí mismo para que 'git pull' devuelva "Already up to date"
+          git -C .buildozer/android/platform/python-for-android \
+            remote set-url origin "$(pwd)/.buildozer/android/platform/python-for-android"
 
       - name: Caché de buildozer (NDK/SDK)
         uses: actions/cache@v4
