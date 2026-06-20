@@ -30,14 +30,16 @@ jobs:
       - name: Instalar buildozer y cython
         run: pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Pre-clonar p4a y parchear Python 3.14 a 3.12.9
+      - name: Pre-clonar p4a master y parchear Python 3.14 a 3.12.9
         run: |
           mkdir -p .buildozer/android/platform
-          git clone --depth 1 https://github.com/kivy/python-for-android.git \
+          git clone -b master https://github.com/kivy/python-for-android.git \
             .buildozer/android/platform/python-for-android
           python3 scripts/patch_p4a.py
-          git -C .buildozer/android/platform/python-for-android \
-            remote set-url origin "$(pwd)/.buildozer/android/platform/python-for-android"
+          cd .buildozer/android/platform/python-for-android
+          git config user.email 'build@ci' && git config user.name 'CI'
+          git add -A && git commit -m 'pin python 3.12.9'
+          cd -
 
       - name: Caché de buildozer (NDK/SDK)
         uses: actions/cache@v4
