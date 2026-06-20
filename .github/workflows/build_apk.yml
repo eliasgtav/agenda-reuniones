@@ -18,12 +18,18 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Instalar dependencias del sistema
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             python3-pip build-essential git zip unzip \
-            openjdk-17-jdk autoconf libtool pkg-config \
+            autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev cmake \
             libffi-dev libssl-dev
 
