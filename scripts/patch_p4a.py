@@ -2,34 +2,44 @@ import re
 
 base = '.buildozer/android/platform/python-for-android/pythonforandroid/recipes'
 
-# hostpython3: Python 3.14 -> 3.12.9
+# hostpython3: Python 3.14.2 -> 3.12.9
+# ATENCION: el archivo usa comillas DOBLES: version = "3.14.2"
 path = f'{base}/hostpython3/__init__.py'
 c = open(path).read()
-c = re.sub(r"version = '[0-9.]+'", "version = '3.12.9'", c, count=1)
-c = re.sub(r"sha512sum = '[^']*'", "sha512sum = ''", c)
+
+# Reemplazo exacto con comillas dobles
+old_ver = '    version = "3.14.2"'
+new_ver = '    version = "3.12.9"'
+if old_ver in c:
+    c = c.replace(old_ver, new_ver, 1)
+    print('hostpython3: version reemplazada (doble comilla) 3.14.2 -> 3.12.9')
+else:
+    # Fallback: cualquier quote style
+    c = re.sub(r'version\s*=\s*[\'"][0-9.]+[\'"]', 'version = "3.12.9"', c, count=1)
+    print('hostpython3: version reemplazada por regex')
+
+# Limpiar sha512sum si existe
+c = re.sub(r'sha512sum\s*=\s*[\'"][^\'\"]*[\'"]', "sha512sum = ''", c)
+# Limpiar patches para evitar fallos con parches de 3.14
 c = re.sub(r'patches\s*=\s*\[[\s\S]*?\]', 'patches = []', c, count=1)
 open(path, 'w').write(c)
 print('hostpython3 parcheado a 3.12.9')
 
-# python3: subclase que fuerza version 3.12.9
-# NOTA: RecipeMeta transforma 'version = ...' en '_version = ...' al definir la clase.
-# La @property 'version' en Recipe retorna self._version, por eso funciona sin setter.
-# NO se puede hacer recipe.version = "..." en instancias (read-only property).
+# python3: ya funciona con la subclase _Py312Fix
+# Solo asegurar que el reemplazo exacto de version tambien se haga
 path = f'{base}/python3/__init__.py'
 c = open(path).read()
 
-# Reemplazo exacto de la version en la clase original (por si acaso)
 old_ver = "    version = '3.14.2'"
 new_ver = "    version = '3.12.9'"
 if old_ver in c:
     c = c.replace(old_ver, new_ver, 1)
-    print('python3: version reemplazada 3.14.2 -> 3.12.9 (exacto)')
+    print('python3: version reemplazada (comilla simple) 3.14.2 -> 3.12.9')
 else:
-    c = re.sub(r"    version = '[0-9.]+'", "    version = '3.12.9'", c, count=1)
+    c = re.sub(r'version\s*=\s*[\'"][0-9.]+[\'"]', "version = '3.12.9'", c, count=1)
     print('python3: version reemplazada por regex')
 
-# Agregar subclase que fuerza version 3.12.9 y omite patches especificos de 3.14
-# RecipeMeta convierte 'version = "3.12.9"' -> '_version = "3.12.9"' automaticamente
+# Subclase override para garantizar version 3.12.9 y omitir patches de 3.14
 c = c.rstrip('\n') + '\n'
 c += '\nclass _Py312Fix(Python3Recipe):\n'
 c += '    version = "3.12.9"\n'
