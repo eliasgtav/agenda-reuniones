@@ -8,13 +8,23 @@ from kivy.utils import platform
 def _get_db_path():
     if platform == 'android':
         try:
-            from android.storage import app_storage_path
-            base = app_storage_path()
+            from kivy.app import App
+            app = App.get_running_app()
+            base = app.user_data_dir if app else None
         except Exception:
-            base = os.path.expanduser('~')
+            base = None
+        if not base:
+            try:
+                from android.storage import app_storage_path
+                base = app_storage_path()
+            except Exception:
+                base = os.path.expanduser('~')
     else:
         base = os.path.expanduser('~')
-    os.makedirs(base, exist_ok=True)
+    try:
+        os.makedirs(base, exist_ok=True)
+    except Exception:
+        base = os.path.expanduser('~')
     return os.path.join(base, 'agenda_reuniones.db')
 
 

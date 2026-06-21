@@ -118,7 +118,7 @@ class AgendaApp(MDApp):
             self.root.ids.bottom_bar.size_hint_y = None
             self.root.ids.bottom_bar.height = 0
         Clock.schedule_interval(self._check_alertas, 60)
-        self._check_alertas()
+        Clock.schedule_once(self._check_alertas, 2)
 
     def _check_alertas(self, *args):
         canceladas = self.db.auto_cancelar_vencidas()
@@ -172,4 +172,33 @@ class AgendaApp(MDApp):
 
 
 if __name__ == '__main__':
-    AgendaApp().run()
+    import traceback
+    from kivy.utils import platform
+    try:
+        AgendaApp().run()
+    except Exception:
+        err = traceback.format_exc()
+        if platform == 'android':
+            try:
+                from kivy.app import App
+                app = App.get_running_app()
+                base = app.user_data_dir if app else '/sdcard'
+            except Exception:
+                base = '/sdcard'
+            crash_path = base + '/agenda_crash.txt'
+            try:
+                with open(crash_path, 'w') as f:
+                    f.write(err)
+            except Exception:
+                pass
+            # Mostrar el error en pantalla para diagnóstico
+            from kivy.base import runTouchApp
+            from kivy.uix.scrollview import ScrollView
+            from kivy.uix.label import Label
+            lbl = Label(text=err, text_size=(None, None), size_hint_y=None)
+            lbl.bind(texture_size=lambda i, v: setattr(i, 'height', v[1]))
+            sv = ScrollView()
+            sv.add_widget(lbl)
+            runTouchApp(sv)
+        else:
+            raise
