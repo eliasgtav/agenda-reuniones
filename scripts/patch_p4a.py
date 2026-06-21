@@ -48,3 +48,22 @@ c += 'Python3Recipe = _Py312Fix\n'
 c += 'recipe = Python3Recipe()\n'
 open(path, 'w').write(c)
 print('python3 parcheado a 3.12.9')
+
+# AndroidManifest: deshabilitar HWUI en la Activity SDL2
+# Crash en Android 15 Honor: pthread_mutex_lock on destroyed mutex (hwuiTask1)
+# SDL2 usa OpenGL ES directo; HWUI interfiere causando SIGABRT
+manifest = '.buildozer/android/platform/python-for-android/pythonforandroid/bootstraps/sdl2/build/templates/AndroidManifest.tmpl.xml'
+try:
+    c = open(manifest).read()
+    if 'android:hardwareAccelerated="false"' not in c:
+        c = c.replace(
+            'android:name="org.kivy.android.PythonActivity"',
+            'android:name="org.kivy.android.PythonActivity"\n        android:hardwareAccelerated="false"',
+            1
+        )
+        open(manifest, 'w').write(c)
+        print('AndroidManifest: hardwareAccelerated=false aplicado')
+    else:
+        print('AndroidManifest: ya tiene hardwareAccelerated=false')
+except Exception as e:
+    print(f'AndroidManifest patch fallido: {e}')
