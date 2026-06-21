@@ -47,7 +47,8 @@ jobs:
           python3 scripts/patch_p4a.py
           cd .buildozer/android/platform/python-for-android
           git config user.email 'build@ci' && git config user.name 'CI'
-          git add -A && git commit -m 'fix hwui android15'
+          git add -A
+          git diff --cached --quiet || git commit -m 'fix hwui android15'
           cd -
 
       - name: Caché de buildozer (NDK/SDK)

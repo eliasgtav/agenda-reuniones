@@ -11,7 +11,7 @@ conflictúa con el OpenGL ES de SDL2 (crash: pthread_mutex_lock on destroyed
 mutex en hwuiTask1). Solución: android:hardwareAccelerated="false" en Activity.
 """
 
-manifest = '.buildozer/android/platform/python-for-android/pythonforandroid/bootstraps/sdl2/build/templates/AndroidManifest.tmpl.xml'
+manifest = '.buildozer/android/platform/python-for-android/pythonforandroid/bootstraps/_sdl_common/build/templates/AndroidManifest.tmpl.xml'
 
 try:
     c = open(manifest).read()
