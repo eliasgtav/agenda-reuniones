@@ -36,30 +36,23 @@ jobs:
       - name: Instalar buildozer y cython
         run: pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Clonar p4a commit 2ebea90d9d (Python 3.11.5 estable)
+      - name: Pre-clonar p4a master y aplicar parches
         run: |
           mkdir -p .buildozer/android/platform
-          git clone https://github.com/kivy/python-for-android.git \
+          git clone -b master https://github.com/kivy/python-for-android.git \
             .buildozer/android/platform/python-for-android
-          git -C .buildozer/android/platform/python-for-android checkout 2ebea90d9d
-
-      - name: Aplicar parche HWUI (AndroidManifest)
-        run: python3 scripts/patch_p4a.py
-
-      - name: Commit del parche en p4a
-        run: |
+          python3 scripts/patch_p4a.py
           cd .buildozer/android/platform/python-for-android
-          git config user.email 'build@ci'
-          git config user.name 'CI'
+          git config user.email 'build@ci' && git config user.name 'CI'
           git add -A
-          git diff --cached --quiet || git commit -m 'hwui android15 fix'
+          git diff --cached --quiet || git commit -m 'fix python 3.12.9 + hwui android15'
 
       - name: Caché de buildozer (NDK/SDK)
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-py311-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-py311-
+          key: buildozer-312-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-312-
 
       - name: Compilar APK
         run: buildozer -v android debug

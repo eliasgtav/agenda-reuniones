@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
 version = 1.0
 
-requirements = python3,kivy==2.3.0,kivymd==1.2.0,openpyxl,plyer,pillow,android
+requirements = python3,kivy==2.3.0,kivymd==1.2.0,openpyxl,plyer,pillow,android,sqlite3,openssl
 
 orientation = portrait
 fullscreen = 1
