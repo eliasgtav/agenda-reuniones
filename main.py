@@ -16,7 +16,15 @@ _CRASH_LOG_PATHS = [
 ]
 
 def _write_crash(err):
-    for path in _CRASH_LOG_PATHS:
+    paths = list(_CRASH_LOG_PATHS)
+    try:
+        import kivy.app
+        app = kivy.app.App.get_running_app()
+        if app and hasattr(app, 'user_data_dir'):
+            paths.insert(0, os.path.join(app.user_data_dir, 'agenda_crash.txt'))
+    except Exception:
+        pass
+    for path in paths:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, 'w', encoding='utf-8') as f:
@@ -25,6 +33,34 @@ def _write_crash(err):
         except Exception:
             continue
     return None
+
+
+def _android_show_crash(err):
+    """Muestra el crash como AlertDialog nativo de Android (siempre visible)."""
+    try:
+        from android.runnable import run_on_ui_thread
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        AlertBuilder = autoclass('android.app.AlertDialog$Builder')
+
+        msg = ('CRASH en Agenda App\n\n' + err)[-2000:]
+
+        @run_on_ui_thread
+        def _show():
+            activity = PythonActivity.mActivity
+            dlg = AlertBuilder(activity)
+            dlg.setTitle('ERROR - Agenda App')
+            dlg.setMessage(msg)
+            dlg.setCancelable(False)
+            dlg.setPositiveButton('OK', None)
+            dlg.create().show()
+
+        _show()
+        import time
+        time.sleep(300)
+    except Exception:
+        _show_crash_screen(err)
+
 
 def _show_crash_screen(err):
     """Muestra el traceback en pantalla si Kivy ya está disponible."""
@@ -225,7 +261,10 @@ if __name__ == '__main__':
 
     if _IMPORT_ERROR:
         _write_crash(_IMPORT_ERROR)
-        _show_crash_screen(_IMPORT_ERROR)
+        if platform == 'android':
+            _android_show_crash(_IMPORT_ERROR)
+        else:
+            _show_crash_screen(_IMPORT_ERROR)
     else:
         try:
             _AgendaApp().run()
@@ -233,6 +272,6 @@ if __name__ == '__main__':
             err = traceback.format_exc()
             _write_crash(err)
             if platform == 'android':
-                _show_crash_screen(err)
+                _android_show_crash(err)
             else:
                 raise
