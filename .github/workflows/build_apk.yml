@@ -51,8 +51,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-312-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-312-${{ hashFiles('buildozer.spec', 'scripts/patch_p4a.py') }}
           restore-keys: buildozer-312-
+
+      - name: Forzar rebuild de stdlib.zip (limpiar cache python3)
+        run: |
+          find ~/.buildozer -name "stdlib.zip" -delete 2>/dev/null || true
+          find ~/.buildozer -name "libpybundle.so" -delete 2>/dev/null || true
+          find ~/.buildozer -path "*python3*" -name ".p4a_build_flag" -delete 2>/dev/null || true
+          echo "Cache python3 limpiado para forzar rebuild de stdlib.zip"
 
       - name: Compilar APK
         run: buildozer -v android debug
