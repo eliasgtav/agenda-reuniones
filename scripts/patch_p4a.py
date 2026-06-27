@@ -2,7 +2,10 @@
 Parches para compilar con p4a master + Kivy 2.3.0:
 
 1. Python 3.14 → 3.12.9
-2. start.c: diagnóstico en archivo (no logcat) para diagnosticar crash en Android 15
+2. python.py: stdlib.zip con ZIP_STORED (sin compresión) para que zipimport
+   no necesite zlib al inicio — sin esto Python no puede importar encodings
+   durante la inicialización (HAVE_ZLIB_H no definido en cross-compile)
+3. start.c: diagnóstico en archivo (no logcat)
 
 Nota: el parche android:hardwareAccelerated="false" fue eliminado porque
 SDL2 2.30.11 ya tiene el fix para Android 15.
@@ -38,7 +41,28 @@ c += 'recipe = Python3Recipe()\n'
 open(path, 'w').write(c)
 print('python3 parcheado a 3.12.9')
 
-# --- 3. start.c: agregar diagnóstico en archivo para debugging sin logcat ---
+# --- 3. python.py: forzar ZIP_STORED en stdlib.zip ---
+# zipimport en C necesita HAVE_ZLIB_H para descomprimir DEFLATE.
+# Si no está definido al compilar (cross-compile con NDK), Python no puede
+# leer NINGUNA entrada de stdlib.zip → falla al importar encodings al init.
+# Solución: usar ZIP_STORED (sin compresión) para que zipimport no necesite zlib.
+python_py_paths = [
+    '.buildozer/android/platform/python-for-android/pythonforandroid/python.py',
+]
+for python_py_path in python_py_paths:
+    if os.path.exists(python_py_path):
+        c = open(python_py_path).read()
+        if 'ZIP_DEFLATED' in c:
+            c = c.replace('ZIP_DEFLATED', 'ZIP_STORED')
+            open(python_py_path, 'w').write(c)
+            print(f'python.py parcheado: ZIP_DEFLATED → ZIP_STORED en stdlib.zip')
+        else:
+            print(f'python.py: ZIP_DEFLATED no encontrado (ya usa STORED o diferente método)')
+        break
+else:
+    print('WARN: python.py no encontrado')
+
+# --- 4. start.c: agregar diagnóstico en archivo para debugging sin logcat ---
 # Buscar start.c en el bootstrap SDL2
 start_c_paths = glob.glob(
     '.buildozer/android/platform/python-for-android/pythonforandroid/bootstraps/sdl2/build/src/main/jni/src/start.c'
