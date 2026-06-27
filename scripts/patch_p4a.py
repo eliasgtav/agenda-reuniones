@@ -133,17 +133,26 @@ static void diag_write(const char *msg) {
         src = src[:end_line] + DIAG_ENV + src[end_line:]
         print('  Diagnóstico de env vars insertado')
 
-    # B) ANTES de Py_InitializeFromConfig: FIX PYTHONHOME + diagnóstico
-    FIX_BEFORE_INIT = '''    /* FIX: unset PYTHONHOME para que no interfiera con module_search_paths */
-    /* Con module_search_paths_set=1, PYTHONHOME causa que Python busque encodings */
-    /* en la ruta equivocada en lugar de buscar en stdlib.zip */
+    # B) Cambiar PyConfig_InitPythonConfig → PyConfig_InitIsolatedConfig
+    # InitIsolatedConfig ignora TODAS las variables de entorno (PYTHONHOME etc.)
+    # desde el principio, sin necesidad de unsetenv posterior.
+    pat_init_config = 'PyConfig_InitPythonConfig(&config)'
+    if pat_init_config in src:
+        src = src.replace(pat_init_config,
+            'PyConfig_InitIsolatedConfig(&config)', 1)
+        print('  PyConfig_InitPythonConfig → PyConfig_InitIsolatedConfig')
+    else:
+        print('  WARN: PyConfig_InitPythonConfig no encontrado')
+
+    # B2) ANTES de Py_InitializeFromConfig: locale + diagnóstico
+    FIX_BEFORE_INIT = '''    /* FIX: forzar locale UTF-8 y limpiar entorno antes de init Python */
     unsetenv("PYTHONHOME");
     setenv("LANG", "C.UTF-8", 1);
     setenv("LC_ALL", "C.UTF-8", 1);
     {
         char _diag_pre[512];
         snprintf(_diag_pre, sizeof(_diag_pre),
-            "pre-init: module_search_paths_set=%d PYTHONHOME_unset=1",
+            "pre-init: module_search_paths_set=%d isolated=1",
             config.module_search_paths_set);
         diag_write(_diag_pre);
         snprintf(_diag_pre, sizeof(_diag_pre), "python_bundle_dir=%s", python_bundle_dir);
@@ -155,7 +164,7 @@ static void diag_write(const char *msg) {
         idx = src.find(pat_py_init)
         line_start = src.rfind('\n', 0, idx) + 1
         src = src[:line_start] + FIX_BEFORE_INIT + src[line_start:]
-        print('  FIX PYTHONHOME + diagnóstico pre-init insertado')
+        print('  Locale UTF-8 + diagnóstico pre-init insertado')
     else:
         print('  WARN: Py_InitializeFromConfig no encontrado')
 
@@ -167,6 +176,9 @@ static void diag_write(const char *msg) {
         snprintf(_diag_buf, sizeof(_diag_buf), "Py_InitializeFromConfig FAIL: %s", status.err_msg ? status.err_msg : "?");
         diag_write(_diag_buf);
     }
+    PyConfig_Clear(&config);
+    Py_ExitStatusException(status);
+    return 1;
 '''
     # Buscar "Initialized python" LOGP que viene después del if de error
     pat_init_ok = 'LOGP("Initialized python")'
@@ -176,12 +188,13 @@ static void diag_write(const char *msg) {
         print('  Diagnóstico post-init-OK insertado')
 
     # Buscar el bloque de error de Py_InitializeFromConfig
+    # Reemplazar TODO el contenido del if para agregar proper error handling
     pat_init_err = 'LOGP("Python initialization failed:")'
     if pat_init_err in src:
         idx = src.find(pat_init_err)
         end_line = src.find('\n', idx) + 1
         src = src[:end_line] + DIAG_INIT_FAIL + src[end_line:]
-        print('  Diagnóstico post-init-FAIL insertado')
+        print('  Diagnóstico + PyConfig_Clear + Py_ExitStatusException post-init-FAIL insertado')
 
     # C) Antes de PyRun_SimpleFile
     DIAG_BEFORE_RUN = '''    {
