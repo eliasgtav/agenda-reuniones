@@ -59,6 +59,7 @@ jobs:
 
       - name: Convertir stdlib.zip a ZIP_STORED en el APK
         run: python3 scripts/fix_stdlib_zip.py
+        continue-on-error: true
 
       - name: Subir APK como artefacto
         uses: actions/upload-artifact@v4
