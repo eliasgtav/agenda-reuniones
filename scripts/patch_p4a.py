@@ -5,8 +5,9 @@ Parches para compilar con p4a master + Kivy 2.3.0:
    de Kivy 2.3.0 ("too few arguments"). Se parchea a 3.12.9 que sí es
    compatible y compila correctamente.
 
-2. HWUI fix (Android 15): android:hardwareAccelerated="false" en la Activity
-   para evitar crash pthread_mutex_lock con SDL2 + OpenGL ES.
+Nota: el parche android:hardwareAccelerated="false" fue eliminado porque
+SDL2 2.30.11 (usado por p4a master actual) ya tiene el fix para Android 15
+(pthread_mutex_lock). Mantenerlo rompía la creación del contexto EGL.
 """
 
 import re
@@ -37,29 +38,3 @@ c += 'Python3Recipe = _Py312Fix\n'
 c += 'recipe = Python3Recipe()\n'
 open(path, 'w').write(c)
 print('python3 parcheado a 3.12.9')
-
-# --- 3. AndroidManifest: HWUI fix (Android 15) ---
-bootstrap_base = '.buildozer/android/platform/python-for-android/pythonforandroid/bootstraps'
-candidates = [
-    os.path.join(bootstrap_base, '_sdl_common/build/templates/AndroidManifest.tmpl.xml'),
-    os.path.join(bootstrap_base, 'sdl2/build/templates/AndroidManifest.tmpl.xml'),
-]
-
-for manifest in candidates:
-    if os.path.exists(manifest):
-        c = open(manifest).read()
-        if 'android:hardwareAccelerated="false"' not in c:
-            c = c.replace(
-                'android:name="org.kivy.android.PythonActivity"',
-                'android:name="org.kivy.android.PythonActivity"\n        android:hardwareAccelerated="false"',
-                1,
-            )
-            open(manifest, 'w').write(c)
-            print(f'HWUI fix aplicado: {manifest}')
-        else:
-            print(f'HWUI fix ya presente: {manifest}')
-        break
-else:
-    print('ADVERTENCIA: AndroidManifest no encontrado')
-    for p in candidates:
-        print(f'  {p} → existe={os.path.exists(p)}')
