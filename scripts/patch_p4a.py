@@ -144,44 +144,19 @@ static void diag_write(const char *msg) {
     else:
         print('  WARN: PyConfig_InitPythonConfig no encontrado')
 
-    # B2) ANTES de Py_InitializeFromConfig: locale + utf8_mode + diagnóstico stdlib.zip
+    # B2) ANTES de Py_InitializeFromConfig: locale + diagnóstico
     FIX_BEFORE_INIT = '''    /* FIX: forzar locale UTF-8 y limpiar entorno antes de init Python */
     unsetenv("PYTHONHOME");
     setenv("LANG", "C.UTF-8", 1);
     setenv("LC_ALL", "C.UTF-8", 1);
-    /* FIX: forzar utf8_mode=1 para evitar deteccion de locale fallida en Android */
-    config.utf8_mode = 1;
     {
         char _diag_pre[512];
         snprintf(_diag_pre, sizeof(_diag_pre),
-            "pre-init: module_search_paths_set=%d utf8_mode=%d",
-            config.module_search_paths_set, config.utf8_mode);
+            "pre-init: module_search_paths_set=%d isolated=1",
+            config.module_search_paths_set);
         diag_write(_diag_pre);
         snprintf(_diag_pre, sizeof(_diag_pre), "python_bundle_dir=%s", python_bundle_dir);
         diag_write(_diag_pre);
-    }
-    /* Verificar stdlib.zip accesible desde C y tipo de compresion */
-    {
-        char _zip_path[512];
-        snprintf(_zip_path, sizeof(_zip_path), "%s/stdlib.zip", python_bundle_dir);
-        FILE *_zf = fopen(_zip_path, "rb");
-        if (_zf) {
-            unsigned char _zhdr[10];
-            int _zn = (int)fread(_zhdr, 1, 10, _zf);
-            fclose(_zf);
-            char _zdiag[256];
-            /* offset 8-9 en local file header = compression method (0=STORED, 8=DEFLATED) */
-            int _compress = (_zn >= 10) ? (_zhdr[8] | (_zhdr[9] << 8)) : -1;
-            snprintf(_zdiag, sizeof(_zdiag),
-                "stdlib.zip: fopen=OK sig=%02x%02x%02x%02x compress=%d(%s)",
-                _zn>0?_zhdr[0]:0, _zn>1?_zhdr[1]:0,
-                _zn>2?_zhdr[2]:0, _zn>3?_zhdr[3]:0,
-                _compress,
-                _compress==0?"STORED":_compress==8?"DEFLATED":"UNKNOWN");
-            diag_write(_zdiag);
-        } else {
-            diag_write("stdlib.zip: fopen=FAIL (permiso denegado o no existe)");
-        }
     }
 '''
     pat_py_init = 'Py_InitializeFromConfig(&config)'
