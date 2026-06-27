@@ -109,7 +109,33 @@ static void diag_write(const char *msg) {
         src = src[:end_line] + DIAG_ENV + src[end_line:]
         print('  Diagnóstico de env vars insertado')
 
-    # B) Después de Py_InitializeFromConfig
+    # B) ANTES de Py_InitializeFromConfig: FIX PYTHONHOME + diagnóstico
+    FIX_BEFORE_INIT = '''    /* FIX: unset PYTHONHOME para que no interfiera con module_search_paths */
+    /* Con module_search_paths_set=1, PYTHONHOME causa que Python busque encodings */
+    /* en la ruta equivocada en lugar de buscar en stdlib.zip */
+    unsetenv("PYTHONHOME");
+    setenv("LANG", "C.UTF-8", 1);
+    setenv("LC_ALL", "C.UTF-8", 1);
+    {
+        char _diag_pre[512];
+        snprintf(_diag_pre, sizeof(_diag_pre),
+            "pre-init: module_search_paths_set=%d PYTHONHOME_unset=1",
+            config.module_search_paths_set);
+        diag_write(_diag_pre);
+        snprintf(_diag_pre, sizeof(_diag_pre), "python_bundle_dir=%s", python_bundle_dir);
+        diag_write(_diag_pre);
+    }
+'''
+    pat_py_init = 'Py_InitializeFromConfig(&config)'
+    if pat_py_init in src:
+        idx = src.find(pat_py_init)
+        line_start = src.rfind('\n', 0, idx) + 1
+        src = src[:line_start] + FIX_BEFORE_INIT + src[line_start:]
+        print('  FIX PYTHONHOME + diagnóstico pre-init insertado')
+    else:
+        print('  WARN: Py_InitializeFromConfig no encontrado')
+
+    # B2) Después de Py_InitializeFromConfig
     DIAG_INIT_OK = '''    diag_write("Py_InitializeFromConfig OK");
 '''
     DIAG_INIT_FAIL = '''    {
