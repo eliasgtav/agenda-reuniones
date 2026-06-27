@@ -11,6 +11,8 @@ if sys.platform == 'win32':
 # Captura TEMPRANA de cualquier crash (incluyendo errores de import)
 # Escribe en el almacenamiento externo con ámbito (accesible desde el gestor de archivos)
 _CRASH_LOG_PATHS = [
+    '/data/data/com.eliasgt.agenda.agendareuniones/files/agenda_crash.txt',
+    '/data/user/0/com.eliasgt.agenda.agendareuniones/files/agenda_crash.txt',
     '/sdcard/Android/data/com.eliasgt.agenda.agendareuniones/files/agenda_crash.txt',
     '/sdcard/agenda_crash.txt',
 ]
