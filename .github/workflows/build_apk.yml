@@ -54,12 +54,34 @@ jobs:
           key: buildozer-312-${{ hashFiles('buildozer.spec', 'scripts/patch_p4a.py') }}
           restore-keys: buildozer-312-
 
+      - name: Recomprimir stdlib.zip a ZIP_STORED en cache buildozer
+        run: |
+          python3 - <<'PYEOF'
+          import zipfile, glob, io, os
+          pattern = os.path.expanduser('~/.buildozer/**/stdlib.zip')
+          found = glob.glob(pattern, recursive=True)
+          if not found:
+              print("stdlib.zip no esta en cache todavia (se construira con ZIP_STORED)")
+          for z in found:
+              with open(z, 'rb') as f:
+                  data = f.read()
+              zf = zipfile.ZipFile(io.BytesIO(data))
+              deflated = [i for i in zf.infolist() if i.compress_type != 0]
+              if not deflated:
+                  print(f"Ya STORED: {z}")
+                  continue
+              print(f"Convirtiendo {len(deflated)} entradas en {z}...")
+              buf = io.BytesIO()
+              with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as nzf:
+                  for info in zf.infolist():
+                      nzf.writestr(info, zf.read(info.filename))
+              with open(z, 'wb') as f:
+                  f.write(buf.getvalue())
+              print(f"  Convertido: {os.path.getsize(z):,} bytes")
+          PYEOF
+
       - name: Compilar APK
         run: buildozer -v android debug
-
-      - name: Convertir stdlib.zip a ZIP_STORED en el APK
-        run: python3 scripts/fix_stdlib_zip.py
-        continue-on-error: true
 
       - name: Subir APK como artefacto
         uses: actions/upload-artifact@v4
