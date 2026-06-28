@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Post-procesa el APK para recomprimir stdlib.zip como ZIP_STORED."""
-import zipfile, tarfile, gzip, io, glob, sys, os
+import zipfile, tarfile, gzip, io, glob, sys, os, copy
 
 apks = glob.glob('bin/*.apk')
 if not apks:
@@ -76,8 +76,11 @@ print(f"Convirtiendo {len(deflated)} entradas a ZIP_STORED...")
 new_stdlib = io.BytesIO()
 with zipfile.ZipFile(new_stdlib, 'w', compression=zipfile.ZIP_STORED) as new_zf:
     for info in all_entries:
-        data = old_zf.read(info.filename)
-        new_zf.writestr(info, data)
+        data = old_zf.read(info.filename)  # descomprimir
+        info_copy = copy.copy(info)
+        info_copy.compress_type = zipfile.ZIP_STORED  # FORZAR STORED
+        info_copy.compress_size = len(data)
+        new_zf.writestr(info_copy, data)
 new_stdlib_data = new_stdlib.getvalue()
 print(f"stdlib.zip nuevo: {len(new_stdlib_data):,} bytes (era {len(stdlib_data):,})")
 
