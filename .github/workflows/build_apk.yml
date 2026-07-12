@@ -36,110 +36,27 @@ jobs:
       - name: Instalar buildozer y cython
         run: pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Pre-clonar p4a master y aplicar parches
+      - name: Pre-clonar p4a (commit estable, Python 3.11.5 nativo) y aplicar parches
         run: |
           mkdir -p .buildozer/android/platform
-          git clone -b master https://github.com/kivy/python-for-android.git \
+          git clone https://github.com/kivy/python-for-android.git \
             .buildozer/android/platform/python-for-android
+          cd .buildozer/android/platform/python-for-android
+          git checkout 2ebea90d9d7e965ef0754466abd185a41ab298aa
+          cd -
           python3 scripts/patch_p4a.py
           cd .buildozer/android/platform/python-for-android
           git config user.email 'build@ci' && git config user.name 'CI'
           git add -A
-          git diff --cached --quiet || git commit -m 'fix python 3.12.9 + hwui android15'
+          git diff --cached --quiet || git commit -m 'stdlib.zip STORED + diagnostico start.c'
 
       - name: Caché de buildozer (NDK/SDK)
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-312b-${{ hashFiles('buildozer.spec', 'scripts/patch_p4a.py') }}
+          key: buildozer-p4a2ebea90-${{ hashFiles('buildozer.spec', 'scripts/patch_p4a.py') }}
           restore-keys: |
-            buildozer-312b-
-            buildozer-312-
-
-      - name: Recomprimir stdlib.zip a ZIP_STORED (standalone + dentro de libpybundle.so)
-        run: |
-          python3 - <<'PYEOF'
-          import zipfile, glob, io, os, copy, gzip, tarfile
-
-          def make_stored(stdlib_data):
-              """Convierte stdlib.zip a ZIP_STORED. Retorna bytes o None si ya es STORED."""
-              zf = zipfile.ZipFile(io.BytesIO(stdlib_data))
-              deflated = [e for e in zf.infolist() if e.compress_type != 0]
-              if not deflated:
-                  return None
-              buf = io.BytesIO()
-              with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as nzf:
-                  for info in zf.infolist():
-                      raw = zf.read(info.filename)
-                      info_copy = copy.copy(info)
-                      info_copy.compress_type = zipfile.ZIP_STORED
-                      info_copy.compress_size = len(raw)
-                      nzf.writestr(info_copy, raw)
-              stored = buf.getvalue()
-              verify = zipfile.ZipFile(io.BytesIO(stored))
-              still = sum(1 for e in verify.infolist() if e.compress_type != 0)
-              if still:
-                  print(f"  ERROR: {still} entradas siguen DEFLATED!")
-                  return None
-              return stored
-
-          found_any = False
-
-          # 1) stdlib.zip standalone (si existe antes de que p4a lo empaquete)
-          for z in glob.glob(os.path.expanduser('~/.buildozer/**/stdlib.zip'), recursive=True):
-              found_any = True
-              data = open(z, 'rb').read()
-              stored = make_stored(data)
-              if stored is None:
-                  print(f"Ya STORED: {z} ({len(data):,} bytes)")
-              else:
-                  open(z, 'wb').write(stored)
-                  print(f"stdlib.zip -> STORED: {z} ({len(data):,} -> {len(stored):,} bytes)")
-
-          # 2) stdlib.zip dentro de libpybundle.so (gzip+tar)
-          for pb in glob.glob(os.path.expanduser('~/.buildozer/**/libpybundle.so'), recursive=True):
-              found_any = True
-              pbd = open(pb, 'rb').read()
-              if pbd[:2] != b'\x1f\x8b':
-                  print(f"SKIP {pb}: no es gzip")
-                  continue
-              with gzip.open(io.BytesIO(pbd)) as gz:
-                  tar_data = gz.read()
-              tf = tarfile.open(fileobj=io.BytesIO(tar_data))
-              members = tf.getmembers()
-              stdlib_m = next((m for m in members if 'stdlib.zip' in m.name), None)
-              if not stdlib_m:
-                  print(f"SKIP {pb}: stdlib.zip no encontrado en tar")
-                  continue
-              stdlib_data = tf.extractfile(stdlib_m).read()
-              stored = make_stored(stdlib_data)
-              if stored is None:
-                  print(f"libpybundle.so: stdlib.zip ya STORED: {pb}")
-                  continue
-              print(f"libpybundle.so: convirtiendo stdlib.zip {len(stdlib_data):,} -> {len(stored):,} bytes")
-              # Reconstruir tar
-              new_tar = io.BytesIO()
-              with tarfile.open(fileobj=new_tar, mode='w') as ntf:
-                  for m in members:
-                      if 'stdlib.zip' in m.name:
-                          ti = tarfile.TarInfo(name=m.name)
-                          ti.size = len(stored)
-                          ti.mode = m.mode
-                          ti.mtime = m.mtime
-                          ntf.addfile(ti, io.BytesIO(stored))
-                      else:
-                          fobj = tf.extractfile(m)
-                          ntf.addfile(m, fobj) if fobj else ntf.addfile(m)
-              # Reconstruir gzip
-              new_gz = io.BytesIO()
-              with gzip.GzipFile(fileobj=new_gz, mode='wb') as gz:
-                  gz.write(new_tar.getvalue())
-              open(pb, 'wb').write(new_gz.getvalue())
-              print(f"  libpybundle.so actualizado: {os.path.getsize(pb):,} bytes -> {pb}")
-
-          if not found_any:
-              print("Nada en cache todavia: stdlib.zip se creara con ZIP_STORED via python.py patch")
-          PYEOF
+            buildozer-p4a2ebea90-
 
       - name: Compilar APK
         run: buildozer -v android debug

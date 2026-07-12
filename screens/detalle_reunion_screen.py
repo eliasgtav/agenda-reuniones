@@ -590,8 +590,48 @@ class DetalleReunionScreen(MDScreen):
         self._escuchando = True
         self.ids.btn_mic.icon_color = (0.8, 0.1, 0.1, 1)
         self.ids.lbl_voz_estado.text = '🎤 Escuchando... habla ahora'
-        import threading
-        threading.Thread(target=self._escuchar_voz, daemon=True).start()
+        if platform == 'android':
+            # speech_recognition + PyAudio son librerias de escritorio: no
+            # estan (ni conviene meterlas, PyAudio/portaudio no compila bien
+            # para Android) en buildozer.spec. En el telefono se usa la API
+            # nativa de reconocimiento de voz de Android via plyer.stt.
+            self._escuchar_voz_android()
+        else:
+            import threading
+            threading.Thread(target=self._escuchar_voz, daemon=True).start()
+
+    def _escuchar_voz_android(self):
+        try:
+            from plyer import stt
+            if not stt.exist():
+                self._voz_error('Este dispositivo no tiene reconocimiento de voz disponible.')
+                return
+            stt._language = 'es-ES'  # el setter publico de plyer solo acepta en-US/pl-PL
+            stt.prefer_offline = False
+            stt.start()
+            Clock.schedule_interval(self._revisar_stt_android, 0.3)
+        except Exception as e:
+            self._voz_error(f'Error: {e}')
+
+    def _revisar_stt_android(self, dt):
+        from plyer import stt
+        if stt.listening:
+            return
+        Clock.unschedule(self._revisar_stt_android)
+        if stt.errors:
+            err = stt.errors[-1]
+            stt.errors = []
+            if 'no_match' in err or 'speech_timeout' in err:
+                self._voz_error('No se detectó voz. Intenta de nuevo.')
+            else:
+                self._voz_error(f'Error: {err}')
+            return
+        if stt.results:
+            texto = stt.results[0]
+            stt.results = []
+            self._insertar_texto_voz(texto)
+        else:
+            self._voz_error('No se detectó voz.')
 
     def _escuchar_voz(self):
         from kivy.clock import Clock

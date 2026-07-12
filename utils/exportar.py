@@ -5,7 +5,30 @@ from datetime import datetime
 
 
 def _ruta_descargas():
-    # Carpeta Descargas en Windows (~\Downloads)
+    # os.path.expanduser('~') no resuelve a la carpeta "Descargas" compartida
+    # en Android (ahi seria una ruta privada de la app, invisible para el
+    # usuario). plyer.storagepath si conoce la ubicacion real por plataforma.
+    try:
+        from plyer import storagepath
+        downloads = storagepath.get_downloads_dir()
+        if downloads:
+            os.makedirs(downloads, exist_ok=True)
+            probe = os.path.join(downloads, '.write_test')
+            with open(probe, 'w'):
+                pass
+            os.remove(probe)
+            return downloads
+    except Exception:
+        pass
+    # Android 11+ (scoped storage) puede bloquear la escritura directa a la
+    # carpeta Descargas compartida: usar la carpeta privada de la app.
+    try:
+        from android.storage import app_storage_path
+        downloads = os.path.join(app_storage_path(), 'Descargas')
+        os.makedirs(downloads, exist_ok=True)
+        return downloads
+    except Exception:
+        pass
     downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
     os.makedirs(downloads, exist_ok=True)
     return downloads

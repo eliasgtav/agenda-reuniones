@@ -3,7 +3,9 @@ import threading
 from datetime import datetime
 from kivy.lang import Builder
 from kivy.app import App
+from kivy.clock import Clock
 from kivy.metrics import dp
+from kivy.utils import platform
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -289,7 +291,47 @@ class EnReunionScreen(MDScreen):
         self._escuchando = True
         self.ids.btn_mic.icon_color = (0.8, 0.1, 0.1, 1)
         self.ids.lbl_estado_voz.text = '🎤 Escuchando... habla ahora'
-        threading.Thread(target=self._escuchar_voz, daemon=True).start()
+        if platform == 'android':
+            # speech_recognition + PyAudio son librerias de escritorio, no
+            # estan en buildozer.spec (PyAudio/portaudio no compila bien
+            # para Android). En el telefono se usa la API nativa de Android
+            # via plyer.stt.
+            self._escuchar_voz_android()
+        else:
+            threading.Thread(target=self._escuchar_voz, daemon=True).start()
+
+    def _escuchar_voz_android(self):
+        try:
+            from plyer import stt
+            if not stt.exist():
+                self._voz_error('Este dispositivo no tiene reconocimiento de voz disponible.')
+                return
+            stt._language = 'es-ES'  # el setter publico de plyer solo acepta en-US/pl-PL
+            stt.prefer_offline = False
+            stt.start()
+            Clock.schedule_interval(self._revisar_stt_android, 0.3)
+        except Exception as e:
+            self._voz_error(f'Error: {e}')
+
+    def _revisar_stt_android(self, dt):
+        from plyer import stt
+        if stt.listening:
+            return
+        Clock.unschedule(self._revisar_stt_android)
+        if stt.errors:
+            err = stt.errors[-1]
+            stt.errors = []
+            if 'no_match' in err or 'speech_timeout' in err:
+                self._voz_error('No se detectó voz. Intenta de nuevo.')
+            else:
+                self._voz_error(f'Error: {err}')
+            return
+        if stt.results:
+            texto = stt.results[0]
+            stt.results = []
+            self._insertar_voz(texto)
+        else:
+            self._voz_error('No se detectó voz.')
 
     def _escuchar_voz(self):
         from kivy.clock import Clock
