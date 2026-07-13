@@ -39,10 +39,21 @@ jobs:
       - name: Pre-clonar p4a (commit estable, Python 3.11.5 nativo) y aplicar parches
         run: |
           mkdir -p .buildozer/android/platform
-          git clone https://github.com/kivy/python-for-android.git \
+          # IMPORTANTE: "-b master" es obligatorio. El repo de p4a tiene
+          # "develop" como rama por defecto; sin -b master, `git clone`
+          # aterriza en "develop", lo cual YA de por si no coincide con lo
+          # que buildozer espera (ver nota abajo) y hace que borre todo.
+          git clone -b master https://github.com/kivy/python-for-android.git \
             .buildozer/android/platform/python-for-android
           cd .buildozer/android/platform/python-for-android
-          git checkout 2ebea90d9d7e965ef0754466abd185a41ab298aa
+          # IMPORTANTE: usar "reset --hard" (no "checkout <sha>"), que deja
+          # el repo en detached HEAD. Buildozer (targets/android.py
+          # _install_p4a) compara la rama actual (`git branch -vv`) contra
+          # p4a.branch ("master" por defecto); si no coincide (detached HEAD
+          # nunca coincide) BORRA el directorio entero y clona master de
+          # nuevo, descartando todos los parches sin avisar. reset --hard
+          # mantiene el checkout en la rama local "master".
+          git reset --hard 2ebea90d9d7e965ef0754466abd185a41ab298aa
           cd -
           python3 scripts/patch_p4a.py
           cd .buildozer/android/platform/python-for-android

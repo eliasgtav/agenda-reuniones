@@ -47,12 +47,18 @@ def _android_show_crash(err):
 
         msg = ('CRASH en Agenda App\n\n' + err)[-2000:]
 
+        # AlertDialog.Builder.setTitle/setMessage tienen overloads (int) y
+        # (CharSequence): pasar un str de Python puede fallar a resolver la
+        # sobrecarga en pyjnius ("No methods called setTitle... matching
+        # your arguments"). Envolver en java.lang.String lo desambigua.
+        JString = autoclass('java.lang.String')
+
         @run_on_ui_thread
         def _show():
             activity = PythonActivity.mActivity
             dlg = AlertBuilder(activity)
-            dlg.setTitle('ERROR - Agenda App')
-            dlg.setMessage(msg)
+            dlg.setTitle(JString('ERROR - Agenda App'))
+            dlg.setMessage(JString(msg))
             dlg.setCancelable(False)
             dlg.setPositiveButton('OK', None)
             dlg.create().show()
