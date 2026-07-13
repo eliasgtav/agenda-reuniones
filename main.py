@@ -60,7 +60,7 @@ def _android_show_crash(err):
             dlg.setTitle(JString('ERROR - Agenda App'))
             dlg.setMessage(JString(msg))
             dlg.setCancelable(False)
-            dlg.setPositiveButton('OK', None)
+            dlg.setPositiveButton(JString('OK'), None)
             dlg.create().show()
 
         _show()
