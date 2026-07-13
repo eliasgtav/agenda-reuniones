@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 
-requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,plyer,pillow,android,sqlite3,openssl
+requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,plyer,android,sqlite3,openssl
 
 # Debe coincidir con la rama que se clona/parchea en build_apk.yml (p4a
 # pineado al commit 2ebea90d9d sobre la rama master). Si no coincide,
