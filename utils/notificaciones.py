@@ -97,7 +97,8 @@ class NotificacionesManager:
             if lo <= minutos <= hi:
                 asunto = alerta['asunto']
                 cuando = MENSAJES[tipo]
-                primer_nombre = cargar_config().get('nombres', '').split()[0]
+                partes_nombre = cargar_config().get('nombres', '').split()
+                primer_nombre = partes_nombre[0] if partes_nombre else ''
                 saludo = f'{primer_nombre}, ' if primer_nombre else ''
                 titulo = f'Reunión próxima — {cuando}'
                 msg = f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}'
@@ -112,7 +113,8 @@ class NotificacionesManager:
     def verificar_plazos_acuerdos(self):
         from datetime import datetime
         hoy = datetime.now().strftime('%Y-%m-%d')
-        primer_nombre = cargar_config().get('nombres', '').split()[0]
+        partes_nombre = cargar_config().get('nombres', '').split()
+        primer_nombre = partes_nombre[0] if partes_nombre else ''
         saludo = f'{primer_nombre}, ' if primer_nombre else ''
 
         for acuerdo in self.db.acuerdos_con_plazo_pendientes():
