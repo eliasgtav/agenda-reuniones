@@ -1,20 +1,26 @@
 """
-Parches para compilar con p4a pineado en el commit 2ebea90d9d (2025-07-24)
+Parches para compilar con p4a master (Python 3.14 con sus parches oficiales)
 + Kivy 2.3.1:
 
-Por que este commit y no p4a master:
-- p4a master (a partir de oct-2025) trae Python 3.14 por defecto, que rompe
-  la API C de Kivy 2.3.x ("too few arguments"). Forzar la version a mano
-  (como se hizo antes) deja fuera los parches oficiales de esa version de
-  Python y produce fallos de enlazado de simbolos en tiempo de ejecucion
-  (p.ej. "cannot locate symbol PyExc_ValueError" al importar math).
-- El commit 2ebea90d9d trae Python 3.11.5 COMO DEFAULT NATIVO (con todos
-  sus parches oficiales aplicados sin trucos) y SDL2 2.30.11 (necesario
-  para el fix de Android 15). Kivy 2.3.0 no compila contra ese SDL2 mas
-  nuevo ("too few arguments" en archivos C de graphics); Kivy 2.3.1 si
-  (agrego soporte para SDL2 mas reciente). Ver buildozer.spec.
+Por que p4a master y no un commit pineado:
+- Se probo pinear p4a a un commit viejo (2ebea90d9d, jul-2025) para evitar
+  Python 3.14, buscando el ultimo commit con Python 3.11.5 nativo. Eso
+  rompio la compilacion de CUALQUIER paquete con pyproject.toml (pyjnius
+  incluido, obligatorio en toda app Kivy): ese commit usaba
+  "python -m build --wheel" con entorno aislado, mecanismo que fallaba con
+  "pyproject_hooks.BackendUnavailable: Cannot import 'setuptools.build_meta'".
+  Ese bug se arreglo en p4a recien en mar-2026 (soporte de wheels
+  precompilados), pero ya con Python 3.14 como version por defecto - no hay
+  un commit que tenga ambas cosas (Python 3.11 nativo + el fix).
+- Verificado en el repo real de p4a (jun-2026): el recipe oficial de Kivy
+  en master ya esta fijado en 2.3.1 (misma version que usamos), combinado
+  con Python 3.14 y sus parches oficiales completos - a diferencia del
+  intento anterior de forzar 3.12.9 a mano, que se saltaba esos parches y
+  producia fallos de enlazado en tiempo de ejecucion (p.ej. "cannot locate
+  symbol PyExc_ValueError" al importar math).
 
-Parches aplicados aqui:
+Parches aplicados aqui (siguen siendo necesarios en p4a master, confirmado
+contra el codigo actual del recipe python3):
 1. recipes/python3: stdlib.zip con ZIP_STORED (zip -X -0, sin compresion)
    para que zipimport no necesite zlib al inicio - sin esto Python no
    puede importar encodings durante la inicializacion (HAVE_ZLIB_H no
