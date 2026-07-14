@@ -97,7 +97,12 @@ _KV = None
 try:
     from kivy.lang import Builder
     from kivy.clock import Clock
+    from kivy.core.window import Window
     from kivy.uix.screenmanager import ScreenManager, FadeTransition
+
+    # Evita que el teclado táctil tape el campo que se está editando
+    # (p.ej. "Notas adicionales" y los botones bajo él).
+    Window.softinput_mode = 'below_target'
     from kivymd.app import MDApp
     from kivymd.uix.button import MDFlatButton
     from kivymd.uix.dialog import MDDialog

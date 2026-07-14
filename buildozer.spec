@@ -15,7 +15,7 @@ requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,plyer,pillow,android,s
 p4a.branch = master
 
 orientation = portrait
-fullscreen = 1
+fullscreen = 0
 
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS
 android.api = 35

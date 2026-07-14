@@ -13,181 +13,198 @@ from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 
 Builder.load_string('''
 <NuevaReunionScreen>:
-    MDScrollView:
-        MDBoxLayout:
-            orientation: 'vertical'
-            padding: '16dp'
-            spacing: '10dp'
-            adaptive_height: True
+    MDBoxLayout:
+        orientation: 'vertical'
 
-            MDLabel:
-                text: "Nueva Reunión"
-                font_style: "H5"
-                adaptive_height: True
-
+        MDScrollView:
             MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDTextField:
-                    id: asunto_field
-                    hint_text: "Asunto de la reunión *"
-                    helper_text: "Campo obligatorio"
-                    helper_text_mode: "on_error"
-                    mode: "rectangle"
-                    font_size: '15sp'
-                    on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('asunto_field')
-
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDTextField:
-                    id: fecha_field
-                    hint_text: "Fecha"
-                    mode: "rectangle"
-                    readonly: True
-                    on_focus: if self.focus: root.abrir_fecha()
-
-                MDTextField:
-                    id: hora_field
-                    hint_text: "Hora"
-                    mode: "rectangle"
-                    readonly: True
-                    on_focus: if self.focus: root.abrir_hora()
-
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDTextField:
-                    id: lugar_field
-                    hint_text: "Lugar"
-                    mode: "rectangle"
-                    font_size: '15sp'
-                    on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('lugar_field')
-
-            MDLabel:
-                text: "Participantes"
-                font_style: "Subtitle1"
-                adaptive_height: True
-
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDTextField:
-                    id: nuevo_participante
-                    hint_text: "Nombre del participante"
-                    mode: "rectangle"
-                    font_size: '15sp'
-                    size_hint_x: .75
-                    on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('nuevo_participante')
-
-                MDIconButton:
-                    icon: "account-plus"
-                    on_release: root.agregar_participante_ui()
-
-            MDBoxLayout:
-                id: participantes_list
                 orientation: 'vertical'
-                adaptive_height: True
-                spacing: '4dp'
-
-            MDLabel:
-                text: "Alertas de recordatorio"
-                font_style: "Subtitle1"
+                padding: '16dp'
+                spacing: '10dp'
                 adaptive_height: True
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDSwitch:
-                    id: sw_30min
-                    active: True
                 MDLabel:
-                    text: "30 min antes"
+                    text: "Nueva Reunión"
+                    font_style: "H5"
                     adaptive_height: True
-                    valign: "center"
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDSwitch:
-                    id: sw_1hora
-                    active: True
-                MDLabel:
-                    text: "1 hora antes"
+                MDBoxLayout:
                     adaptive_height: True
-                    valign: "center"
+                    spacing: '8dp'
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
+                    MDTextField:
+                        id: asunto_field
+                        hint_text: "Asunto de la reunión *"
+                        helper_text: "Campo obligatorio"
+                        helper_text_mode: "on_error"
+                        mode: "rectangle"
+                        font_size: '15sp'
+                        on_text: self.text = self.text.upper()
 
-                MDSwitch:
-                    id: sw_1dia
-                    active: True
-                MDLabel:
-                    text: "1 día antes"
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.enfocar('asunto_field')
+
+                MDBoxLayout:
                     adaptive_height: True
-                    valign: "center"
+                    spacing: '8dp'
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
+                    MDTextField:
+                        id: fecha_field
+                        hint_text: "Fecha *"
+                        mode: "rectangle"
+                        readonly: True
+                        on_focus: if self.focus: root.abrir_fecha()
+
+                    MDIconButton:
+                        icon: "calendar"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.abrir_fecha()
+
+                    MDTextField:
+                        id: hora_field
+                        hint_text: "Hora"
+                        mode: "rectangle"
+                        readonly: True
+                        on_focus: if self.focus: root.abrir_hora()
+
+                    MDIconButton:
+                        icon: "clock-outline"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.abrir_hora()
+
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
+
+                    MDTextField:
+                        id: lugar_field
+                        hint_text: "Lugar"
+                        mode: "rectangle"
+                        font_size: '15sp'
+                        on_text: self.text = self.text.upper()
+
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.enfocar('lugar_field')
 
                 MDLabel:
-                    text: "Notas adicionales"
+                    text: "Participantes"
                     font_style: "Subtitle1"
                     adaptive_height: True
 
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('notas_field')
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
 
-            MDTextField:
-                id: notas_field
-                hint_text: "Escribe las notas con lápiz o teclado..."
-                mode: "rectangle"
-                multiline: True
-                size_hint_y: None
-                height: '180dp'
-                font_size: '15sp'
+                    MDTextField:
+                        id: nuevo_participante
+                        hint_text: "Nombre del participante"
+                        mode: "rectangle"
+                        font_size: '15sp'
+                        size_hint_x: .75
+                        on_text: self.text = self.text.upper()
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.enfocar('nuevo_participante')
 
-                MDFlatButton:
-                    text: "CANCELAR"
-                    on_release: app.go_back()
+                    MDIconButton:
+                        icon: "account-plus"
+                        on_release: root.agregar_participante_ui()
 
-                MDRaisedButton:
-                    text: "GUARDAR REUNIÓN"
-                    on_release: root.guardar()
+                MDBoxLayout:
+                    id: participantes_list
+                    orientation: 'vertical'
+                    adaptive_height: True
+                    spacing: '4dp'
+
+                MDLabel:
+                    text: "Alertas de recordatorio"
+                    font_style: "Subtitle1"
+                    adaptive_height: True
+
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
+
+                    MDSwitch:
+                        id: sw_30min
+                        active: True
+                    MDLabel:
+                        text: "30 min antes"
+                        adaptive_height: True
+                        valign: "center"
+
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
+
+                    MDSwitch:
+                        id: sw_1hora
+                        active: True
+                    MDLabel:
+                        text: "1 hora antes"
+                        adaptive_height: True
+                        valign: "center"
+
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
+
+                    MDSwitch:
+                        id: sw_1dia
+                        active: True
+                    MDLabel:
+                        text: "1 día antes"
+                        adaptive_height: True
+                        valign: "center"
+
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
+
+                    MDLabel:
+                        text: "Notas adicionales"
+                        font_style: "Subtitle1"
+                        adaptive_height: True
+
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.enfocar('notas_field')
+
+                MDTextField:
+                    id: notas_field
+                    hint_text: "Escribe las notas con lápiz o teclado..."
+                    mode: "rectangle"
+                    multiline: True
+                    size_hint_y: None
+                    height: '180dp'
+                    font_size: '15sp'
+
+        MDBoxLayout:
+            adaptive_height: True
+            padding: '16dp', '8dp', '16dp', '8dp'
+            spacing: '8dp'
+            md_bg_color: app.theme_cls.bg_normal
+
+            MDFlatButton:
+                text: "CANCELAR"
+                on_release: app.go_back()
+
+            MDRaisedButton:
+                text: "GUARDAR REUNIÓN"
+                on_release: root.guardar()
 ''')
 
 
