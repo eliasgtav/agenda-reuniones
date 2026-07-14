@@ -587,6 +587,9 @@ class DetalleReunionScreen(MDScreen):
     def toggle_voz(self):
         if self._escuchando:
             return
+        self._con_permiso_audio(self._iniciar_escucha)
+
+    def _iniciar_escucha(self):
         self._escuchando = True
         self.ids.btn_mic.icon_color = (0.8, 0.1, 0.1, 1)
         self.ids.lbl_voz_estado.text = '🎤 Escuchando... habla ahora'
@@ -824,10 +827,34 @@ class DetalleReunionScreen(MDScreen):
         self.ids.btn_nueva_hora.text = 'Seleccionar hora'
         self.cargar()
 
+    def _con_permiso_audio(self, on_granted):
+        """RECORD_AUDIO en el manifest no basta: Android 6+ exige pedirlo en
+        tiempo de ejecucion, si no toda API de audio/voz falla con
+        'insufficient_permissions'."""
+        if platform != 'android':
+            on_granted()
+            return
+        from android.permissions import check_permission, request_permissions, Permission
+        if check_permission(Permission.RECORD_AUDIO):
+            on_granted()
+            return
+
+        def _en_respuesta(permissions, resultados):
+            if resultados and all(resultados):
+                Clock.schedule_once(lambda dt: on_granted(), 0)
+            else:
+                Clock.schedule_once(lambda dt: self._mostrar_info(
+                    'Permiso requerido',
+                    'Se necesita permiso de micrófono para esta función. '
+                    'Actívalo en Ajustes del sistema > Apps > Agenda de Reuniones > Permisos > Micrófono.',
+                ), 0)
+
+        request_permissions([Permission.RECORD_AUDIO], _en_respuesta)
+
     def toggle_grabacion(self):
-        global _grabando, _grabacion_path
+        global _grabando
         if not _grabando:
-            self._iniciar_grabacion()
+            self._con_permiso_audio(self._iniciar_grabacion)
         else:
             self._detener_grabacion()
 
