@@ -18,7 +18,7 @@ orientation = portrait
 fullscreen = 0
 
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS
-android.api = 35
+android.api = 34
 android.minapi = 26
 android.ndk = 25b
 android.sdk = 35
