@@ -116,6 +116,10 @@ Builder.load_string('''
                     icon: "account-plus"
                     on_release: root.agregar_participante()
 
+                MDIconButton:
+                    icon: "contacts"
+                    on_release: root.elegir_contacto()
+
             # ── Área de Trabajo ──────────────────────────────────────
             MDCard:
                 orientation: 'vertical'
@@ -468,6 +472,18 @@ class DetalleReunionScreen(MDScreen):
         db = App.get_running_app().db
         db.agregar_participante(self._reunion_id, nombre)
         self.ids.nuevo_participante.text = ''
+        self._cargar_participantes(db)
+
+    def elegir_contacto(self):
+        from utils.contactos import abrir_selector
+        abrir_selector(self._contacto_elegido, lambda msg: self._mostrar_info('Contactos', msg))
+
+    def _contacto_elegido(self, nombre):
+        nombre = nombre.strip()
+        if not nombre:
+            return
+        db = App.get_running_app().db
+        db.agregar_participante(self._reunion_id, nombre)
         self._cargar_participantes(db)
 
     def _cargar_archivos(self, db):

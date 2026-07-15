@@ -1,6 +1,5 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import os
-import shutil
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.metrics import dp
@@ -199,8 +198,12 @@ class PerfilScreen(MDScreen):
                 else:
                     dest_dir = os.path.join(os.path.expanduser('~'), 'agenda_adjuntos')
                 os.makedirs(dest_dir, exist_ok=True)
-                dest = os.path.join(dest_dir, 'foto_perfil' + ext)
-                shutil.copy2(ruta_orig, dest)
+                dest = os.path.join(dest_dir, 'foto_perfil.png')
+                try:
+                    self._recortar_a_cuadro(ruta_orig, dest)
+                except Exception as e:
+                    self._mostrar('Error', f'No se pudo procesar la imagen: {e}')
+                    return
                 self.ids.foto_img.source = ''
                 self.ids.foto_img.source = dest
                 config = cargar()
@@ -214,6 +217,21 @@ class PerfilScreen(MDScreen):
             )
         except Exception as e:
             self._mostrar('Error', f'No se pudo abrir el selector: {e}')
+
+    def _recortar_a_cuadro(self, ruta_origen, ruta_destino, tamano=480):
+        """Recorta la imagen elegida (de cualquier tamaño o proporción) al
+        cuadrado central, que es el área que realmente se ve en el círculo
+        de perfil, y la reduce a `tamano`x`tamano` antes de guardarla."""
+        from PIL import Image, ImageOps
+        img = ImageOps.exif_transpose(Image.open(ruta_origen))
+        img = img.convert('RGB')
+        ancho, alto = img.size
+        lado = min(ancho, alto)
+        izquierda = (ancho - lado) // 2
+        arriba = (alto - lado) // 2
+        img = img.crop((izquierda, arriba, izquierda + lado, arriba + lado))
+        img = img.resize((tamano, tamano), Image.LANCZOS)
+        img.save(ruta_destino, format='PNG')
 
     def guardar_correo(self):
         config = cargar()
