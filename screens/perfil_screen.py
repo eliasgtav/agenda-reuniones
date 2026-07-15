@@ -61,12 +61,14 @@ Builder.load_string('''
                 hint_text: "Nombres *"
                 mode: "rectangle"
                 icon_right: "account"
+                on_text: self.text = self.text.upper()
 
             MDTextField:
                 id: apellidos_field
                 hint_text: "Apellidos *"
                 mode: "rectangle"
                 icon_right: "account"
+                on_text: self.text = self.text.upper()
 
             MDRaisedButton:
                 text: "CAMBIAR FOTO"

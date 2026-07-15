@@ -53,34 +53,43 @@ Builder.load_string('''
                     adaptive_height: True
 
             MDBoxLayout:
+                orientation: 'vertical'
                 adaptive_height: True
                 spacing: '6dp'
 
-                MDRaisedButton:
-                    text: "REALIZADA"
-                    md_bg_color: 0.13, 0.55, 0.13, 1
-                    on_release: root.cambiar_estado('realizada')
-                    size_hint_x: .25
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '6dp'
 
-                MDRaisedButton:
-                    text: "CANCELADA"
-                    md_bg_color: 0.80, 0.13, 0.13, 1
-                    on_release: root.cambiar_estado('cancelada')
-                    size_hint_x: .25
+                    MDRaisedButton:
+                        text: "REALIZADA"
+                        md_bg_color: 0.13, 0.55, 0.13, 1
+                        on_release: root.cambiar_estado('realizada')
+                        size_hint_x: .5
 
-                MDRaisedButton:
-                    text: "NO ASISTÍ"
-                    md_bg_color: 0.90, 0.40, 0.13, 1
-                    on_release: root.cambiar_estado('no_asistida')
-                    size_hint_x: .25
+                    MDRaisedButton:
+                        text: "CANCELADA"
+                        md_bg_color: 0.80, 0.13, 0.13, 1
+                        on_release: root.cambiar_estado('cancelada')
+                        size_hint_x: .5
 
-                MDRaisedButton:
-                    id: btn_en_reunion
-                    text: "EN REUNIÓN"
-                    md_bg_color: 0.5, 0.5, 0.5, 1
-                    disabled: True
-                    on_release: root.abrir_en_reunion()
-                    size_hint_x: .25
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '6dp'
+
+                    MDRaisedButton:
+                        text: "NO ASISTÍ"
+                        md_bg_color: 0.90, 0.40, 0.13, 1
+                        on_release: root.cambiar_estado('no_asistida')
+                        size_hint_x: .5
+
+                    MDRaisedButton:
+                        id: btn_en_reunion
+                        text: "EN REUNIÓN"
+                        md_bg_color: 0.5, 0.5, 0.5, 1
+                        disabled: True
+                        on_release: root.abrir_en_reunion()
+                        size_hint_x: .5
 
             MDLabel:
                 text: "Participantes"
@@ -266,29 +275,39 @@ Builder.load_string('''
                     text: "GRABAR REUNIÓN"
                     md_bg_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_grabacion()
+                    size_hint_x: .5
 
                 MDRaisedButton:
                     text: "ADJUNTAR ARCHIVO"
                     md_bg_color: 0.40, 0.23, 0.72, 1
                     on_release: root.adjuntar_archivo()
+                    size_hint_x: .5
 
             MDBoxLayout:
+                orientation: 'vertical'
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDRaisedButton:
-                    text: "GUARDAR CAMBIOS"
-                    md_bg_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.guardar_cambios()
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: '8dp'
 
-                MDRaisedButton:
-                    text: "TERMINAR REUNIÓN"
-                    md_bg_color: 0.13, 0.55, 0.13, 1
-                    on_release: root.terminar_reunion()
+                    MDRaisedButton:
+                        text: "GUARDAR CAMBIOS"
+                        md_bg_color: 0.13, 0.40, 0.75, 1
+                        on_release: root.guardar_cambios()
+                        size_hint_x: .5
+
+                    MDRaisedButton:
+                        text: "TERMINAR REUNIÓN"
+                        md_bg_color: 0.13, 0.55, 0.13, 1
+                        on_release: root.terminar_reunion()
+                        size_hint_x: .5
 
                 MDFlatButton:
                     text: "VOLVER"
                     on_release: app.go_back()
+                    pos_hint: {"center_x": .5}
 
             MDCard:
                 orientation: 'vertical'
@@ -313,12 +332,14 @@ Builder.load_string('''
                         text: "Seleccionar fecha"
                         on_release: root.abrir_fecha_reprog()
                         md_bg_color: 0.40, 0.23, 0.72, 1
+                        size_hint_x: .5
 
                     MDRaisedButton:
                         id: btn_nueva_hora
                         text: "Seleccionar hora"
                         on_release: root.abrir_hora_reprog()
                         md_bg_color: 0.40, 0.23, 0.72, 1
+                        size_hint_x: .5
 
                 MDRaisedButton:
                     text: "CONFIRMAR REPROGRAMACIÓN"

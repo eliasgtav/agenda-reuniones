@@ -52,6 +52,7 @@ Builder.load_string('''
                 hint_text: "Nombres *"
                 mode: "rectangle"
                 font_size: '15sp'
+                on_text: self.text = self.text.upper()
 
             MDIconButton:
                 icon: "pencil"
@@ -68,6 +69,7 @@ Builder.load_string('''
                 hint_text: "Apellidos *"
                 mode: "rectangle"
                 font_size: '15sp'
+                on_text: self.text = self.text.upper()
 
             MDIconButton:
                 icon: "pencil"
