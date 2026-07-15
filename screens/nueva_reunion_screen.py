@@ -137,7 +137,7 @@ Builder.load_string('''
                     id: sw_30min
                     active: True
                 MDLabel:
-                    text: "30 min antes"
+                    text: "10 min antes"
                     adaptive_height: True
                     valign: "center"
 
@@ -149,7 +149,7 @@ Builder.load_string('''
                     id: sw_1hora
                     active: True
                 MDLabel:
-                    text: "1 hora antes"
+                    text: "15 min antes"
                     adaptive_height: True
                     valign: "center"
 
@@ -161,7 +161,7 @@ Builder.load_string('''
                     id: sw_1dia
                     active: True
                 MDLabel:
-                    text: "1 día antes"
+                    text: "30 min antes"
                     adaptive_height: True
                     valign: "center"
 

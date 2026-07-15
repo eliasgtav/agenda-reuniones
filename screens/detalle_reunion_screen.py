@@ -866,9 +866,12 @@ class DetalleReunionScreen(MDScreen):
             if platform == 'android':
                 from android.storage import app_storage_path
                 dest_dir = app_storage_path()
+                ext = '3gp'
             else:
                 dest_dir = os.path.expanduser('~')
-            _grabacion_path = os.path.join(dest_dir, f'reunion_{ts}.wav')
+                ext = 'wav'
+            _grabacion_path = os.path.join(dest_dir, f'reunion_{ts}.{ext}')
+            audio.file_path = _grabacion_path
             audio.start()
             _grabando = True
             self.ids.btn_grabar.text = 'DETENER GRABACIÓN'

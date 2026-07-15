@@ -69,15 +69,15 @@ def _notificar(titulo, mensaje):
 
 
 UMBRALES = {
-    '30min': (25, 35),
-    '1hora': (55, 65),
-    '1dia':  (1415, 1445),
+    '30min': (5, 15),
+    '1hora': (10, 20),
+    '1dia':  (25, 35),
 }
 
 MENSAJES = {
-    '30min': 'en 30 minutos',
-    '1hora': 'en 1 hora',
-    '1dia':  'mañana',
+    '30min': 'en 10 minutos',
+    '1hora': 'en 15 minutos',
+    '1dia':  'en 30 minutos',
 }
 
 
