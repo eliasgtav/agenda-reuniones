@@ -222,6 +222,69 @@ MDBoxLayout:
             # Forzar el tamaño real y un re-layout corrige eso.
             self.root.size = Window.size
             self.root.do_layout()
+            from kivy.utils import platform
+            if platform == 'android':
+                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.3)
+
+        def _mostrar_diagnostico_layout(self, dt):
+            """DIAGNÓSTICO TEMPORAL: muestra medidas reales de la ventana en
+            el dispositivo para averiguar por qué el layout sale corrido en
+            el primer arranque. Quitar una vez resuelto el bug."""
+            root = self.root
+            toolbar = root.ids.toolbar
+            sm = root.ids.sm
+            bar = root.ids.bottom_bar
+            info = [
+                f'Window.size = {Window.size}',
+                f'root.size = {root.size}  root.pos = {root.pos}',
+                f'toolbar.size = {toolbar.size}  toolbar.pos = {toolbar.pos}',
+                f'sm.size = {sm.size}  sm.pos = {sm.pos}',
+                f'bottom_bar.size = {bar.size}  bottom_bar.pos = {bar.pos}',
+            ]
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                activity = PythonActivity.mActivity
+                DisplayMetrics = autoclass('android.util.DisplayMetrics')
+                metrics = DisplayMetrics()
+                activity.getWindowManager().getDefaultDisplay().getRealMetrics(metrics)
+                info.append(
+                    f'Android real display px = {metrics.widthPixels} x '
+                    f'{metrics.heightPixels}, density={metrics.density}'
+                )
+
+                Rect = autoclass('android.graphics.Rect')
+                rect = Rect()
+                decor = activity.getWindow().getDecorView()
+                decor.getWindowVisibleDisplayFrame(rect)
+                info.append(
+                    f'decorView visible frame = top:{rect.top} '
+                    f'bottom:{rect.bottom} left:{rect.left} right:{rect.right}'
+                )
+                info.append(
+                    f'decorView size = {decor.getWidth()} x {decor.getHeight()}'
+                )
+
+                resources = activity.getResources()
+                rid_status = resources.getIdentifier('status_bar_height', 'dimen', 'android')
+                status_h = resources.getDimensionPixelSize(rid_status) if rid_status > 0 else -1
+                rid_nav = resources.getIdentifier('navigation_bar_height', 'dimen', 'android')
+                nav_h = resources.getDimensionPixelSize(rid_nav) if rid_nav > 0 else -1
+                info.append(f'status_bar_height px = {status_h}, navigation_bar_height px = {nav_h}')
+
+                AndroidR = autoclass('android.R$id')
+                content_view = activity.findViewById(AndroidR.content)
+                info.append(f'content view size = {content_view.getWidth()} x {content_view.getHeight()}')
+            except Exception as e:
+                info.append(f'Error leyendo metrics de Android: {e}')
+
+            texto = '\n'.join(info)
+            dialog = MDDialog(
+                title='Diagnóstico de layout (temporal)',
+                text=texto,
+                buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
+            )
+            dialog.open()
 
         def _check_alertas(self, *args):
             canceladas = self.db.auto_cancelar_vencidas()
