@@ -203,4 +203,5 @@ class DashboardScreen(MDScreen):
         config = cargar_config()
         self.ids.lbl_nombre.text = config.get('nombre', 'Usuario')
         foto = config.get('foto_perfil', '')
+        self.ids.avatar_img.source = ''
         self.ids.avatar_img.source = foto if foto and os.path.exists(foto) else ''
