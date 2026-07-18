@@ -8,6 +8,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
+from kivy.core.audio import SoundLoader
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
@@ -361,6 +362,9 @@ COLORES_ESTADO = {
 
 _grabando = False
 _grabacion_path = None
+_sonido_actual = None
+_sonido_archivo_id = None
+_sonido_btn = None
 
 
 class DetalleReunionScreen(MDScreen):
@@ -388,6 +392,7 @@ class DetalleReunionScreen(MDScreen):
         if self._check_hora_event:
             self._check_hora_event.cancel()
             self._check_hora_event = None
+        self._detener_sonido()
 
     def _verificar_hora_reunion(self):
         if not self._reunion_id:
@@ -499,10 +504,117 @@ class DetalleReunionScreen(MDScreen):
                 shorten_from='right',
             ))
             aid = a['id']
+            if a['tipo'] == 'audio':
+                icono = 'stop-circle' if _sonido_archivo_id == aid else 'play-circle'
+                btn_play = MDIconButton(icon=icono, size_hint_x=None, width=dp(40))
+                btn_play.bind(on_release=lambda _, i=aid, r=a['ruta'], b=btn_play: self._toggle_reproducir(i, r, b))
+                fila.add_widget(btn_play)
             btn_del = MDIconButton(icon='delete', size_hint_x=None, width=dp(40))
             btn_del.bind(on_release=lambda _, i=aid: self._borrar_archivo(i))
             fila.add_widget(btn_del)
             lista.add_widget(fila)
+
+    def _toggle_reproducir(self, archivo_id, ruta, btn):
+        global _sonido_actual, _sonido_archivo_id
+        if _sonido_archivo_id == archivo_id and _sonido_actual:
+            self._detener_sonido()
+            return
+        if _sonido_actual:
+            self._detener_sonido()
+        if platform == 'android':
+            self._reproducir_android(archivo_id, ruta, btn)
+        else:
+            self._reproducir_desktop(archivo_id, ruta, btn)
+
+    def _reproducir_desktop(self, archivo_id, ruta, btn):
+        global _sonido_actual, _sonido_archivo_id, _sonido_btn
+        try:
+            sonido = SoundLoader.load(ruta)
+        except Exception:
+            sonido = None
+        if not sonido:
+            self._mostrar_info('Reproducir audio', 'No se pudo reproducir este archivo de audio.')
+            return
+        _sonido_actual = sonido
+        _sonido_archivo_id = archivo_id
+        _sonido_btn = btn
+        btn.icon = 'stop-circle'
+
+        def _al_terminar(instance):
+            global _sonido_actual, _sonido_archivo_id, _sonido_btn
+            if _sonido_actual is sonido:
+                _sonido_actual = None
+                _sonido_archivo_id = None
+                _sonido_btn = None
+            btn.icon = 'play-circle'
+
+        sonido.bind(on_stop=_al_terminar)
+        sonido.play()
+
+    def _reproducir_android(self, archivo_id, ruta, btn):
+        # SDL2_mixer (usado por SoundLoader) no decodifica .3gp/AMR en Android;
+        # se usa el MediaPlayer nativo, que si soporta el formato de grabacion.
+        global _sonido_actual, _sonido_archivo_id, _sonido_btn
+        try:
+            from jnius import autoclass
+            MediaPlayer = autoclass('android.media.MediaPlayer')
+            mp = MediaPlayer()
+            mp.setDataSource(ruta)
+            mp.prepare()
+            mp.start()
+        except Exception as e:
+            self._mostrar_info('Reproducir audio', f'No se pudo reproducir: {e}')
+            return
+        _sonido_actual = mp
+        _sonido_archivo_id = archivo_id
+        _sonido_btn = btn
+        btn.icon = 'stop-circle'
+
+        def _revisar_fin(dt):
+            global _sonido_actual, _sonido_archivo_id, _sonido_btn
+            if _sonido_actual is not mp:
+                return False
+            try:
+                sigue = mp.isPlaying()
+            except Exception:
+                sigue = False
+            if not sigue:
+                try:
+                    mp.release()
+                except Exception:
+                    pass
+                _sonido_actual = None
+                _sonido_archivo_id = None
+                _sonido_btn = None
+                btn.icon = 'play-circle'
+                return False
+            return True
+
+        Clock.schedule_interval(_revisar_fin, 0.5)
+
+    def _detener_sonido(self):
+        global _sonido_actual, _sonido_archivo_id, _sonido_btn
+        sonido = _sonido_actual
+        btn = _sonido_btn
+        _sonido_actual = None
+        _sonido_archivo_id = None
+        _sonido_btn = None
+        if sonido is None:
+            return
+        try:
+            sonido.stop()
+        except Exception:
+            pass
+        if platform == 'android':
+            try:
+                sonido.release()
+            except Exception:
+                pass
+        if btn is not None:
+            try:
+                btn.icon = 'play-circle'
+            except Exception:
+                pass
 
     def _borrar_archivo(self, aid):
         def _confirmar(_):
