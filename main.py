@@ -234,13 +234,30 @@ MDBoxLayout:
             toolbar = root.ids.toolbar
             sm = root.ids.sm
             bar = root.ids.bottom_bar
+            pantalla = sm.current_screen
             info = [
+                f'Pantalla actual = {sm.current}',
                 f'Window.size = {Window.size}',
                 f'root.size = {root.size}  root.pos = {root.pos}',
                 f'toolbar.size = {toolbar.size}  toolbar.pos = {toolbar.pos}',
                 f'sm.size = {sm.size}  sm.pos = {sm.pos}',
                 f'bottom_bar.size = {bar.size}  bottom_bar.pos = {bar.pos}',
+                f'pantalla.size = {pantalla.size}  pantalla.pos = {pantalla.pos}',
             ]
+            if pantalla.children:
+                hijo = pantalla.children[0]
+                info.append(
+                    f'pantalla.children[0] ({type(hijo).__name__}) = '
+                    f'size:{hijo.size} pos:{hijo.pos}'
+                )
+                if hasattr(hijo, 'scroll_y'):
+                    info.append(f'  scroll_y = {hijo.scroll_y}')
+                if hijo.children:
+                    nieto = hijo.children[0]
+                    info.append(
+                        f'  hijo[0] ({type(nieto).__name__}) = '
+                        f'size:{nieto.size} pos:{nieto.pos}'
+                    )
             try:
                 from jnius import autoclass
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -315,6 +332,9 @@ MDBoxLayout:
                 bar.opacity = 1
                 bar.size_hint_y = None
                 bar.height = '56dp'
+            from kivy.utils import platform
+            if platform == 'android' and screen_name != 'login':
+                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.3)
 
         _PARENT_SCREEN = {
             'lista_reuniones': 'dashboard',
