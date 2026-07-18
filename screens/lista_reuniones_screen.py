@@ -131,12 +131,17 @@ class ListaReunionesScreen(MDScreen):
         self._forzar_scroll_arriba()
 
     def _forzar_scroll_arriba(self):
-        # Ver nota en dashboard_screen.py: el MDScrollView puede quedar
-        # "scrolleado" al fondo si el contenido (adaptive_height) todavía
-        # no llega a su tamaño final cuando se calcula el rango de scroll.
+        # Ver nota completa en dashboard_screen.py.
         from kivy.clock import Clock
-        self.ids.scroll_view.scroll_y = 1
-        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
+        sv = self.ids.scroll_view
+
+        def _reset(dt=None):
+            sv.scroll_y = 1
+            sv.update_from_scroll()
+
+        _reset()
+        for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
+            Clock.schedule_once(_reset, delay)
 
     def _crear_card(self, reunion):
         color = COLORES_ESTADO.get(reunion['estado'], (0.95, 0.95, 0.95, 1))

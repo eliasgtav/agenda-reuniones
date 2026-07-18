@@ -202,14 +202,23 @@ class DashboardScreen(MDScreen):
         self._forzar_scroll_arriba()
 
     def _forzar_scroll_arriba(self):
-        # El contenido (adaptive_height) termina de medirse en cuadros
-        # posteriores; si el MDScrollView calcula su rango de scroll antes
-        # de que el contenido llegue a su tamaño final, puede quedar
-        # "scrolleado" al fondo en vez de arriba. Forzar scroll_y = 1 ahora
-        # y otra vez en el siguiente cuadro cubre ambos casos.
+        # El contenido (adaptive_height) puede tardar varios cuadros en
+        # terminar de medirse en Android, y mientras tanto el MDScrollView
+        # puede quedar "scrolleado" al fondo -- aunque scroll_y ya reporte
+        # 1, el area dibujada no siempre coincide (condicion de carrera, no
+        # se arregla con un solo intento a tiempo fijo). Se reintenta varias
+        # veces durante el primer segundo y se fuerza update_from_scroll()
+        # para que el redibujado coincida con la propiedad.
         from kivy.clock import Clock
-        self.ids.scroll_view.scroll_y = 1
-        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
+        sv = self.ids.scroll_view
+
+        def _reset(dt=None):
+            sv.scroll_y = 1
+            sv.update_from_scroll()
+
+        _reset()
+        for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
+            Clock.schedule_once(_reset, delay)
 
     def actualizar_perfil(self):
         import os

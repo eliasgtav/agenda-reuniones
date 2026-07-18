@@ -212,19 +212,9 @@ MDBoxLayout:
                 self.root.ids.bottom_bar.height = 0
             Clock.schedule_interval(self._check_alertas, 60)
             Clock.schedule_once(self._check_alertas, 2)
-            Clock.schedule_once(self._reajustar_layout, 0.5)
-
-        def _reajustar_layout(self, dt):
-            # En el arranque en frío en Android, Window a veces reporta un
-            # tamaño provisional antes de que el sistema descuente la barra
-            # de estado/navegación, y el layout inicial queda calculado con
-            # ese tamaño incorrecto (contenido corrido, botones tapados).
-            # Forzar el tamaño real y un re-layout corrige eso.
-            self.root.size = Window.size
-            self.root.do_layout()
             from kivy.utils import platform
             if platform == 'android':
-                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.3)
+                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.8)
 
         def _mostrar_diagnostico_layout(self, dt):
             """DIAGNÓSTICO TEMPORAL: muestra medidas reales de la ventana en
