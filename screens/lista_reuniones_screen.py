@@ -43,6 +43,7 @@ Builder.load_string('''
                 md_bg_color: 0.13, 0.40, 0.75, 1
 
         MDScrollView:
+            id: scroll_view
             MDBoxLayout:
                 id: lista_reuniones
                 orientation: 'vertical'
@@ -123,9 +124,19 @@ class ListaReunionesScreen(MDScreen):
                 adaptive_height=True,
                 padding=[0, dp(20)],
             ))
+            self._forzar_scroll_arriba()
             return
         for r in reuniones:
             lista.add_widget(self._crear_card(r))
+        self._forzar_scroll_arriba()
+
+    def _forzar_scroll_arriba(self):
+        # Ver nota en dashboard_screen.py: el MDScrollView puede quedar
+        # "scrolleado" al fondo si el contenido (adaptive_height) todavía
+        # no llega a su tamaño final cuando se calcula el rango de scroll.
+        from kivy.clock import Clock
+        self.ids.scroll_view.scroll_y = 1
+        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
 
     def _crear_card(self, reunion):
         color = COLORES_ESTADO.get(reunion['estado'], (0.95, 0.95, 0.95, 1))

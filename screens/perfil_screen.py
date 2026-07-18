@@ -24,6 +24,7 @@ _LADO_RECORTE = 480
 Builder.load_string('''
 <PerfilScreen>:
     MDScrollView:
+        id: scroll_view
         MDBoxLayout:
             orientation: 'vertical'
             padding: '24dp'
@@ -191,6 +192,15 @@ class PerfilScreen(MDScreen):
         self.ids.correo_password_field.text = config.get('correo_password', '')
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
         self.ids.smtp_server_field.text     = config.get('smtp_server', 'smtp.gmail.com')
+        self._forzar_scroll_arriba()
+
+    def _forzar_scroll_arriba(self):
+        # Ver nota en dashboard_screen.py: el MDScrollView puede quedar
+        # "scrolleado" al fondo si el contenido (adaptive_height) todavía
+        # no llega a su tamaño final cuando se calcula el rango de scroll.
+        from kivy.clock import Clock
+        self.ids.scroll_view.scroll_y = 1
+        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
 
     def seleccionar_foto(self):
         try:

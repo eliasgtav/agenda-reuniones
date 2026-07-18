@@ -21,6 +21,7 @@ from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 Builder.load_string('''
 <DetalleReunionScreen>:
     MDScrollView:
+        id: scroll_view
         MDBoxLayout:
             orientation: 'vertical'
             padding: '12dp'
@@ -386,7 +387,16 @@ class DetalleReunionScreen(MDScreen):
                 self._check_hora_event = Clock.schedule_interval(
                     lambda dt: self._verificar_hora_reunion(), 10
                 )
+                self._forzar_scroll_arriba()
         Clock.schedule_once(_load, 0)
+
+    def _forzar_scroll_arriba(self):
+        # Ver nota en dashboard_screen.py: el MDScrollView puede quedar
+        # "scrolleado" al fondo si el contenido (adaptive_height) todavía
+        # no llega a su tamaño final cuando se calcula el rango de scroll.
+        from kivy.clock import Clock
+        self.ids.scroll_view.scroll_y = 1
+        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
 
     def on_leave(self):
         if self._check_hora_event:

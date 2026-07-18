@@ -12,6 +12,7 @@ from utils.config import cargar as cargar_config
 Builder.load_string('''
 <DashboardScreen>:
     MDScrollView:
+        id: scroll_view
         MDBoxLayout:
             orientation: 'vertical'
             padding: '16dp'
@@ -197,6 +198,18 @@ class DashboardScreen(MDScreen):
                 font_style='Body1',
                 adaptive_height=True,
             ))
+
+        self._forzar_scroll_arriba()
+
+    def _forzar_scroll_arriba(self):
+        # El contenido (adaptive_height) termina de medirse en cuadros
+        # posteriores; si el MDScrollView calcula su rango de scroll antes
+        # de que el contenido llegue a su tamaño final, puede quedar
+        # "scrolleado" al fondo en vez de arriba. Forzar scroll_y = 1 ahora
+        # y otra vez en el siguiente cuadro cubre ambos casos.
+        from kivy.clock import Clock
+        self.ids.scroll_view.scroll_y = 1
+        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
 
     def actualizar_perfil(self):
         import os

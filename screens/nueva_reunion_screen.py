@@ -15,6 +15,7 @@ from utils.voz import DictadoVoz
 Builder.load_string('''
 <NuevaReunionScreen>:
     MDScrollView:
+        id: scroll_view
         MDBoxLayout:
             orientation: 'vertical'
             padding: '16dp'
@@ -293,6 +294,15 @@ class NuevaReunionScreen(MDScreen):
         self.ids.nuevo_participante.text = ''
         self.ids.lbl_voz_estado.text = ''
         self.ids.participantes_list.clear_widgets()
+        self._forzar_scroll_arriba()
+
+    def _forzar_scroll_arriba(self):
+        # Ver nota en dashboard_screen.py: el MDScrollView puede quedar
+        # "scrolleado" al fondo si el contenido (adaptive_height) todavía
+        # no llega a su tamaño final cuando se calcula el rango de scroll.
+        from kivy.clock import Clock
+        self.ids.scroll_view.scroll_y = 1
+        Clock.schedule_once(lambda dt: setattr(self.ids.scroll_view, 'scroll_y', 1), 0)
 
     # ── Dictado por voz ──────────────────────────────────────────────
 
