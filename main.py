@@ -212,6 +212,16 @@ MDBoxLayout:
                 self.root.ids.bottom_bar.height = 0
             Clock.schedule_interval(self._check_alertas, 60)
             Clock.schedule_once(self._check_alertas, 2)
+            Clock.schedule_once(self._reajustar_layout, 0.5)
+
+        def _reajustar_layout(self, dt):
+            # En el arranque en frío en Android, Window a veces reporta un
+            # tamaño provisional antes de que el sistema descuente la barra
+            # de estado/navegación, y el layout inicial queda calculado con
+            # ese tamaño incorrecto (contenido corrido, botones tapados).
+            # Forzar el tamaño real y un re-layout corrige eso.
+            self.root.size = Window.size
+            self.root.do_layout()
 
         def _check_alertas(self, *args):
             canceladas = self.db.auto_cancelar_vencidas()
