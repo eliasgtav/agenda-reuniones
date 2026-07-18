@@ -10,6 +10,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
+from utils.voz import DictadoVoz
 
 Builder.load_string('''
 <NuevaReunionScreen>:
@@ -43,6 +44,15 @@ Builder.load_string('''
                     size_hint_x: None
                     width: '36dp'
                     on_release: root.enfocar('asunto_field')
+
+                MDIconButton:
+                    id: asunto_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('asunto_field', 'asunto_mic')
 
             MDBoxLayout:
                 adaptive_height: True
@@ -91,6 +101,15 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar('lugar_field')
 
+                MDIconButton:
+                    id: lugar_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('lugar_field', 'lugar_mic')
+
             MDLabel:
                 text: "Participantes"
                 font_style: "Subtitle1"
@@ -115,11 +134,24 @@ Builder.load_string('''
                     on_release: root.enfocar('nuevo_participante')
 
                 MDIconButton:
+                    id: participante_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('nuevo_participante', 'participante_mic')
+
+                MDIconButton:
                     icon: "account-plus"
+                    size_hint_x: None
+                    width: '36dp'
                     on_release: root.agregar_participante_ui()
 
                 MDIconButton:
                     icon: "contacts"
+                    size_hint_x: None
+                    width: '36dp'
                     on_release: root.elegir_contacto()
 
             MDBoxLayout:
@@ -184,14 +216,32 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar('notas_field')
 
+                MDIconButton:
+                    id: notas_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('notas_field', 'notas_mic')
+
             MDTextField:
                 id: notas_field
-                hint_text: "Escribe las notas con lápiz o teclado..."
+                hint_text: "Escribe las notas con lápiz, teclado o voz..."
                 mode: "rectangle"
                 multiline: True
                 size_hint_y: None
                 height: '180dp'
                 font_size: '15sp'
+
+            MDLabel:
+                id: lbl_voz_estado
+                text: ""
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Custom"
+                text_color: 0.13, 0.55, 0.13, 1
 
             MDBoxLayout:
                 adaptive_height: True
@@ -223,6 +273,7 @@ def _chip_participante(nombre, on_remove):
 class NuevaReunionScreen(MDScreen):
     _participantes = []
     _editar_id = None
+    _dictados = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -240,7 +291,22 @@ class NuevaReunionScreen(MDScreen):
         self.ids.lugar_field.text = ''
         self.ids.notas_field.text = ''
         self.ids.nuevo_participante.text = ''
+        self.ids.lbl_voz_estado.text = ''
         self.ids.participantes_list.clear_widgets()
+
+    # ── Dictado por voz ──────────────────────────────────────────────
+
+    def toggle_voz(self, campo_id, boton_id):
+        if self._dictados is None:
+            self._dictados = {}
+        if campo_id not in self._dictados:
+            self._dictados[campo_id] = DictadoVoz(
+                campo=self.ids[campo_id],
+                boton_mic=self.ids[boton_id],
+                lbl_estado=self.ids.lbl_voz_estado,
+                on_permiso_denegado=self._mostrar_error,
+            )
+        self._dictados[campo_id].toggle()
 
     def cargar_para_editar(self, reunion_id):
         app = App.get_running_app()
