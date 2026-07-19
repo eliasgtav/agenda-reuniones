@@ -98,7 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
-    from kivy.uix.screenmanager import ScreenManager, NoTransition
+    from kivy.uix.screenmanager import ScreenManager, SlideTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
     # (p.ej. "Notas adicionales" y los botones bajo él).
@@ -204,9 +204,12 @@ MDBoxLayout:
             # a ese mismo tamano -- si el tamano real de la ventana en
             # Android todavia no se estabiliza en ese momento, esa foto mala
             # queda "pegada" en pantalla (hueco arriba, contenido tapado)
-            # aunque el layout real ya este bien despues. NoTransition no usa
-            # FBO ni fuerza tamanos, evita el problema de raiz.
-            root.ids.sm.transition = NoTransition()
+            # aunque el layout real ya este bien despues. SlideTransition NO
+            # extiende ShaderTransition (no usa Fbo ni fuerza tamanos, solo
+            # mueve pos), evita ese bug, y de paso tapa con la animacion el
+            # cuadro en que ambas pantallas coexisten (NoTransition dejaba
+            # ver ese cuadro como un destello de la pantalla anterior).
+            root.ids.sm.transition = SlideTransition(direction='left')
             return root
 
         def on_start(self):
