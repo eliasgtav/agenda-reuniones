@@ -98,7 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
-    from kivy.uix.screenmanager import ScreenManager, SlideTransition
+    from kivy.uix.screenmanager import ScreenManager, NoTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
     # (p.ej. "Notas adicionales" y los botones bajo él).
@@ -204,12 +204,17 @@ MDBoxLayout:
             # a ese mismo tamano -- si el tamano real de la ventana en
             # Android todavia no se estabiliza en ese momento, esa foto mala
             # queda "pegada" en pantalla (hueco arriba, contenido tapado)
-            # aunque el layout real ya este bien despues. SlideTransition NO
-            # extiende ShaderTransition (no usa Fbo ni fuerza tamanos, solo
-            # mueve pos), evita ese bug, y de paso tapa con la animacion el
-            # cuadro en que ambas pantallas coexisten (NoTransition dejaba
-            # ver ese cuadro como un destello de la pantalla anterior).
-            root.ids.sm.transition = SlideTransition(direction='left', duration=0.2)
+            # aunque el layout real ya este bien despues.
+            # SlideTransition evitaba ese bug (no usa Fbo) pero seguia
+            # mostrando un destello al salir de Detalle -- se rastreo a
+            # eventos de Clock.schedule_once (carga inicial + reintentos de
+            # scroll) que quedaban pendientes y disparaban sobre la pantalla
+            # ya no-actual durante la animacion. Con esos ya cancelados en
+            # on_leave(), se vuelve a NoTransition (cambio instantaneo, cero
+            # riesgo de que ambas pantallas se vean a la vez) para
+            # confirmar si el destello era de la animacion o de esos
+            # eventos.
+            root.ids.sm.transition = NoTransition()
             return root
 
         def on_start(self):
