@@ -209,7 +209,7 @@ MDBoxLayout:
             # mueve pos), evita ese bug, y de paso tapa con la animacion el
             # cuadro en que ambas pantallas coexisten (NoTransition dejaba
             # ver ese cuadro como un destello de la pantalla anterior).
-            root.ids.sm.transition = SlideTransition(direction='left')
+            root.ids.sm.transition = SlideTransition(direction='left', duration=0.2)
             return root
 
         def on_start(self):

@@ -170,16 +170,21 @@ def _reunion_card(reunion):
 
 class DashboardScreen(MDScreen):
     _scroll_retry_events = None
+    _load_event = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
-        Clock.schedule_once(lambda dt: self.actualizar(), 0)
+        self._load_event = Clock.schedule_once(lambda dt: self.actualizar(), 0)
 
     def on_leave(self):
-        # Cancela los reintentos pendientes de _forzar_scroll_arriba: si
-        # siguen disparando despues de salir de la pantalla, fuerzan un
-        # redibujo justo mientras SlideTransition anima la salida, y se ve
-        # como un destello/salto de esta pantalla al cambiar a otra.
+        # Cancela la carga y los reintentos pendientes: si siguen
+        # disparando despues de salir de la pantalla, fuerzan una
+        # reconstruccion/redibujo justo mientras SlideTransition anima la
+        # salida, y se ve como un destello/salto de esta pantalla al
+        # cambiar a otra.
+        if self._load_event:
+            self._load_event.cancel()
+            self._load_event = None
         for ev in (self._scroll_retry_events or []):
             ev.cancel()
         self._scroll_retry_events = None

@@ -374,6 +374,7 @@ class DetalleReunionScreen(MDScreen):
     _nueva_hora = None
     _check_hora_event = None
     _scroll_retry_events = None
+    _load_event = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -389,7 +390,7 @@ class DetalleReunionScreen(MDScreen):
                     lambda dt: self._verificar_hora_reunion(), 10
                 )
                 self._forzar_scroll_arriba()
-        Clock.schedule_once(_load, 0)
+        self._load_event = Clock.schedule_once(_load, 0)
 
     def _forzar_scroll_arriba(self):
         # Ver nota completa en dashboard_screen.py.
@@ -407,6 +408,9 @@ class DetalleReunionScreen(MDScreen):
         ]
 
     def on_leave(self):
+        if self._load_event:
+            self._load_event.cancel()
+            self._load_event = None
         if self._check_hora_event:
             self._check_hora_event.cancel()
             self._check_hora_event = None

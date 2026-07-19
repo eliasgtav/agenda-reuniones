@@ -276,13 +276,17 @@ class NuevaReunionScreen(MDScreen):
     _editar_id = None
     _dictados = None
     _scroll_retry_events = None
+    _load_event = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
-        Clock.schedule_once(lambda dt: self._reset_form(), 0)
+        self._load_event = Clock.schedule_once(lambda dt: self._reset_form(), 0)
 
     def on_leave(self):
         # Ver nota completa en dashboard_screen.py.
+        if self._load_event:
+            self._load_event.cancel()
+            self._load_event = None
         for ev in (self._scroll_retry_events or []):
             ev.cancel()
         self._scroll_retry_events = None
