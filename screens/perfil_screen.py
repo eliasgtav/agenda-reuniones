@@ -178,9 +178,17 @@ Builder.load_string('''
 ''')
 
 class PerfilScreen(MDScreen):
+    _scroll_retry_events = None
+
     def on_pre_enter(self):
         from kivy.clock import Clock
         Clock.schedule_once(lambda dt: self._cargar_perfil(), 0)
+
+    def on_leave(self):
+        # Ver nota completa en dashboard_screen.py.
+        for ev in (self._scroll_retry_events or []):
+            ev.cancel()
+        self._scroll_retry_events = None
 
     def _cargar_perfil(self):
         config = cargar()
@@ -204,8 +212,10 @@ class PerfilScreen(MDScreen):
             sv.update_from_scroll()
 
         _reset()
-        for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
+        self._scroll_retry_events = [
             Clock.schedule_once(_reset, delay)
+            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
+        ]
 
     def seleccionar_foto(self):
         try:

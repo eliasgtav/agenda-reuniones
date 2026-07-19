@@ -169,9 +169,20 @@ def _reunion_card(reunion):
 
 
 class DashboardScreen(MDScreen):
+    _scroll_retry_events = None
+
     def on_pre_enter(self):
         from kivy.clock import Clock
         Clock.schedule_once(lambda dt: self.actualizar(), 0)
+
+    def on_leave(self):
+        # Cancela los reintentos pendientes de _forzar_scroll_arriba: si
+        # siguen disparando despues de salir de la pantalla, fuerzan un
+        # redibujo justo mientras SlideTransition anima la salida, y se ve
+        # como un destello/salto de esta pantalla al cambiar a otra.
+        for ev in (self._scroll_retry_events or []):
+            ev.cancel()
+        self._scroll_retry_events = None
 
     def actualizar(self):
         app = App.get_running_app()
@@ -217,8 +228,10 @@ class DashboardScreen(MDScreen):
             sv.update_from_scroll()
 
         _reset()
-        for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
+        self._scroll_retry_events = [
             Clock.schedule_once(_reset, delay)
+            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
+        ]
 
     def actualizar_perfil(self):
         import os

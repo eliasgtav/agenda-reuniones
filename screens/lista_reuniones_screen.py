@@ -72,6 +72,7 @@ class ListaReunionesScreen(MDScreen):
     _filtro_activo = 'todas'
     _busqueda = ''
     _dialog = None
+    _scroll_retry_events = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -81,6 +82,12 @@ class ListaReunionesScreen(MDScreen):
             self._construir_filtros()
             self.cargar()
         Clock.schedule_once(_init, 0)
+
+    def on_leave(self):
+        # Ver nota completa en dashboard_screen.py.
+        for ev in (self._scroll_retry_events or []):
+            ev.cancel()
+        self._scroll_retry_events = None
 
     def _construir_filtros(self):
         bar = self.ids.filtros_bar
@@ -140,8 +147,10 @@ class ListaReunionesScreen(MDScreen):
             sv.update_from_scroll()
 
         _reset()
-        for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
+        self._scroll_retry_events = [
             Clock.schedule_once(_reset, delay)
+            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
+        ]
 
     def _crear_card(self, reunion):
         color = COLORES_ESTADO.get(reunion['estado'], (0.95, 0.95, 0.95, 1))
