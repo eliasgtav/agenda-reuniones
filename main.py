@@ -221,9 +221,6 @@ MDBoxLayout:
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
                 Clock.schedule_once(self._reajustar_layout, delay)
-            from kivy.utils import platform
-            if platform == 'android':
-                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.8)
 
         def _reajustar_layout(self, dt):
             # En el arranque en frío en Android, Window a veces reporta un
@@ -235,83 +232,6 @@ MDBoxLayout:
             # importar en qué cuadro se estabiliza el tamaño real.
             self.root.size = Window.size
             self.root.do_layout()
-
-        def _mostrar_diagnostico_layout(self, dt):
-            """DIAGNÓSTICO TEMPORAL: muestra medidas reales de la ventana en
-            el dispositivo para averiguar por qué el layout sale corrido en
-            el primer arranque. Quitar una vez resuelto el bug."""
-            root = self.root
-            toolbar = root.ids.toolbar
-            sm = root.ids.sm
-            bar = root.ids.bottom_bar
-            pantalla = sm.current_screen
-            info = [
-                f'Pantalla actual = {sm.current}',
-                f'Window.size = {Window.size}',
-                f'root.size = {root.size}  root.pos = {root.pos}',
-                f'toolbar.size = {toolbar.size}  toolbar.pos = {toolbar.pos}',
-                f'sm.size = {sm.size}  sm.pos = {sm.pos}',
-                f'bottom_bar.size = {bar.size}  bottom_bar.pos = {bar.pos}',
-                f'pantalla.size = {pantalla.size}  pantalla.pos = {pantalla.pos}',
-            ]
-            if pantalla.children:
-                hijo = pantalla.children[0]
-                info.append(
-                    f'pantalla.children[0] ({type(hijo).__name__}) = '
-                    f'size:{hijo.size} pos:{hijo.pos}'
-                )
-                if hasattr(hijo, 'scroll_y'):
-                    info.append(f'  scroll_y = {hijo.scroll_y}')
-                if hijo.children:
-                    nieto = hijo.children[0]
-                    info.append(
-                        f'  hijo[0] ({type(nieto).__name__}) = '
-                        f'size:{nieto.size} pos:{nieto.pos}'
-                    )
-            try:
-                from jnius import autoclass
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                activity = PythonActivity.mActivity
-                DisplayMetrics = autoclass('android.util.DisplayMetrics')
-                metrics = DisplayMetrics()
-                activity.getWindowManager().getDefaultDisplay().getRealMetrics(metrics)
-                info.append(
-                    f'Android real display px = {metrics.widthPixels} x '
-                    f'{metrics.heightPixels}, density={metrics.density}'
-                )
-
-                Rect = autoclass('android.graphics.Rect')
-                rect = Rect()
-                decor = activity.getWindow().getDecorView()
-                decor.getWindowVisibleDisplayFrame(rect)
-                info.append(
-                    f'decorView visible frame = top:{rect.top} '
-                    f'bottom:{rect.bottom} left:{rect.left} right:{rect.right}'
-                )
-                info.append(
-                    f'decorView size = {decor.getWidth()} x {decor.getHeight()}'
-                )
-
-                resources = activity.getResources()
-                rid_status = resources.getIdentifier('status_bar_height', 'dimen', 'android')
-                status_h = resources.getDimensionPixelSize(rid_status) if rid_status > 0 else -1
-                rid_nav = resources.getIdentifier('navigation_bar_height', 'dimen', 'android')
-                nav_h = resources.getDimensionPixelSize(rid_nav) if rid_nav > 0 else -1
-                info.append(f'status_bar_height px = {status_h}, navigation_bar_height px = {nav_h}')
-
-                AndroidR = autoclass('android.R$id')
-                content_view = activity.findViewById(AndroidR.content)
-                info.append(f'content view size = {content_view.getWidth()} x {content_view.getHeight()}')
-            except Exception as e:
-                info.append(f'Error leyendo metrics de Android: {e}')
-
-            texto = '\n'.join(info)
-            dialog = MDDialog(
-                title='Diagnóstico de layout (temporal)',
-                text=texto,
-                buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-            )
-            dialog.open()
 
         def _check_alertas(self, *args):
             canceladas = self.db.auto_cancelar_vencidas()
@@ -342,9 +262,6 @@ MDBoxLayout:
                 bar.opacity = 1
                 bar.size_hint_y = None
                 bar.height = '56dp'
-            from kivy.utils import platform
-            if platform == 'android' and screen_name != 'login':
-                Clock.schedule_once(self._mostrar_diagnostico_layout, 0.3)
 
         _PARENT_SCREEN = {
             'lista_reuniones': 'dashboard',
