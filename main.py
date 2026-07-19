@@ -98,7 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
-    from kivy.uix.screenmanager import ScreenManager, FadeTransition
+    from kivy.uix.screenmanager import ScreenManager, NoTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
     # (p.ej. "Notas adicionales" y los botones bajo él).
@@ -199,7 +199,14 @@ MDBoxLayout:
             self.notif_manager = NotificacionesManager(self.db)
 
             root = Builder.load_string(_KV)
-            root.ids.sm.transition = FadeTransition()
+            # FadeTransition (ShaderTransition) toma una foto (FBO) de cada
+            # pantalla al tamano que tenga en ese instante y fuerza screen_in
+            # a ese mismo tamano -- si el tamano real de la ventana en
+            # Android todavia no se estabiliza en ese momento, esa foto mala
+            # queda "pegada" en pantalla (hueco arriba, contenido tapado)
+            # aunque el layout real ya este bien despues. NoTransition no usa
+            # FBO ni fuerza tamanos, evita el problema de raiz.
+            root.ids.sm.transition = NoTransition()
             return root
 
         def on_start(self):
