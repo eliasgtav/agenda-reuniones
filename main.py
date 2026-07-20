@@ -230,6 +230,21 @@ MDBoxLayout:
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
                 Clock.schedule_once(self._reajustar_layout, delay)
+            # Los reintentos de arriba tienen un limite fijo de 1s -- en un
+            # arranque en frio particularmente lento (cache de disco fria,
+            # primera vez que Android compila/carga todo) Window.size puede
+            # tardar mas que eso en estabilizarse, y ese limite se queda
+            # corto (hueco arriba, MDScrollView mal calculado). En vez de
+            # adivinar un tiempo mas largo, reaccionar directamente cada vez
+            # que Window.size CAMBIE de verdad, sin limite de tiempo -- asi
+            # no importa cuanto tarde ese arranque en particular.
+            Window.bind(size=self._on_window_resize)
+
+        def _on_window_resize(self, window, size):
+            self._reajustar_layout(0)
+            pantalla = self.root.ids.sm.current_screen
+            if hasattr(pantalla, '_forzar_scroll_arriba'):
+                pantalla._forzar_scroll_arriba()
 
         def _ir_a(self, screen_name):
             sm = self.root.ids.sm
