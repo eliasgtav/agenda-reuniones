@@ -12,10 +12,11 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.image import Image as KivyImage
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
+from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
+from utils.voz import DictadoVoz
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -52,7 +53,7 @@ Builder.load_string('''
                     elevation: 4
                     md_bg_color: .85, .85, .85, 1
                     ripple_behavior: True
-                    on_release: root.seleccionar_foto()
+                    on_release: root.elegir_foto()
 
                     Image:
                         id: foto_img
@@ -68,25 +69,70 @@ Builder.load_string('''
                 adaptive_height: True
                 theme_text_color: "Secondary"
 
-            MDTextField:
-                id: nombres_field
-                hint_text: "Nombres *"
-                mode: "rectangle"
-                icon_right: "account"
-                on_text: self.text = self.text.upper()
+            MDBoxLayout:
+                adaptive_height: True
+                spacing: '8dp'
 
-            MDTextField:
-                id: apellidos_field
-                hint_text: "Apellidos *"
-                mode: "rectangle"
-                icon_right: "account"
-                on_text: self.text = self.text.upper()
+                MDTextField:
+                    id: nombres_field
+                    hint_text: "Nombres *"
+                    mode: "rectangle"
+                    on_text: self.text = self.text.upper()
+
+                MDIconButton:
+                    icon: "pencil"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.enfocar('nombres_field')
+
+                MDIconButton:
+                    id: nombres_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('nombres_field', 'nombres_mic')
+
+            MDBoxLayout:
+                adaptive_height: True
+                spacing: '8dp'
+
+                MDTextField:
+                    id: apellidos_field
+                    hint_text: "Apellidos *"
+                    mode: "rectangle"
+                    on_text: self.text = self.text.upper()
+
+                MDIconButton:
+                    icon: "pencil"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.enfocar('apellidos_field')
+
+                MDIconButton:
+                    id: apellidos_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz('apellidos_field', 'apellidos_mic')
+
+            MDLabel:
+                id: lbl_voz_estado
+                text: ""
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Custom"
+                text_color: 0.13, 0.55, 0.13, 1
 
             MDRaisedButton:
                 text: "CAMBIAR FOTO"
                 pos_hint: {"center_x": .5}
                 md_bg_color: 0.40, 0.23, 0.72, 1
-                on_release: root.seleccionar_foto()
+                on_release: root.elegir_foto()
 
             MDRaisedButton:
                 text: "GUARDAR PERFIL"
@@ -180,6 +226,7 @@ Builder.load_string('''
 class PerfilScreen(MDScreen):
     _scroll_retry_events = None
     _load_event = None
+    _dictados = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -198,6 +245,7 @@ class PerfilScreen(MDScreen):
         config = cargar()
         self.ids.nombres_field.text   = config.get('nombres', '')
         self.ids.apellidos_field.text = config.get('apellidos', '')
+        self.ids.lbl_voz_estado.text  = ''
         foto = config.get('foto_perfil', '')
         self.ids.foto_img.source = foto if foto and os.path.exists(foto) else ''
         self.ids.correo_origen_field.text  = config.get('correo_origen', '')
@@ -205,6 +253,23 @@ class PerfilScreen(MDScreen):
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
         self.ids.smtp_server_field.text     = config.get('smtp_server', 'smtp.gmail.com')
         self._forzar_scroll_arriba()
+
+    def enfocar(self, field_id):
+        self.ids[field_id].focus = True
+
+    # ── Dictado por voz ──────────────────────────────────────────────
+
+    def toggle_voz(self, campo_id, boton_id):
+        if self._dictados is None:
+            self._dictados = {}
+        if campo_id not in self._dictados:
+            self._dictados[campo_id] = DictadoVoz(
+                campo=self.ids[campo_id],
+                boton_mic=self.ids[boton_id],
+                lbl_estado=self.ids.lbl_voz_estado,
+                on_permiso_denegado=self._mostrar_error,
+            )
+        self._dictados[campo_id].toggle()
 
     def _forzar_scroll_arriba(self):
         # Ver nota completa en dashboard_screen.py.
@@ -221,7 +286,45 @@ class PerfilScreen(MDScreen):
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
         ]
 
-    def seleccionar_foto(self):
+    def _rutas_foto(self):
+        if platform == 'android':
+            from android.storage import app_storage_path
+            dest_dir = app_storage_path()
+        else:
+            dest_dir = os.path.join(os.path.expanduser('~'), 'agenda_adjuntos')
+        os.makedirs(dest_dir, exist_ok=True)
+        return dest_dir, os.path.join(dest_dir, 'foto_perfil.png')
+
+    def elegir_foto(self):
+        dialog = MDDialog(
+            title='Foto de perfil',
+            text='¿De dónde quieres tomar la foto?',
+            buttons=[
+                MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss()),
+                MDFlatButton(
+                    text='GALERÍA',
+                    on_release=lambda x: [dialog.dismiss(), self._desde_galeria()],
+                ),
+                MDRaisedButton(
+                    text='CÁMARA',
+                    md_bg_color=(0.13, 0.40, 0.75, 1),
+                    on_release=lambda x: [dialog.dismiss(), self._desde_camara()],
+                ),
+            ],
+        )
+        dialog.open()
+
+    def _desde_galeria(self):
+        # plyer.filechooser en Android devuelve URIs content:// que PIL no
+        # puede abrir directo, y en pruebas reales el selector no llegaba a
+        # cargar la imagen -- en Android se usa un Intent nativo
+        # (utils/foto_selector.py) que copia la imagen a un archivo local
+        # de verdad antes de abrirla con PIL.
+        if platform == 'android':
+            from utils import foto_selector
+            dest_dir, _dest = self._rutas_foto()
+            foto_selector.abrir_galeria(dest_dir, self._on_foto_temporal, self._mostrar_error)
+            return
         try:
             from plyer import filechooser
 
@@ -233,25 +336,7 @@ class PerfilScreen(MDScreen):
                 if ext not in EXTENSIONES_FOTO:
                     self._mostrar('Error', f'Selecciona una imagen ({_EXTENSIONES_FOTO_TXT}).')
                     return
-                if platform == 'android':
-                    from android.storage import app_storage_path
-                    dest_dir = app_storage_path()
-                else:
-                    dest_dir = os.path.join(os.path.expanduser('~'), 'agenda_adjuntos')
-                os.makedirs(dest_dir, exist_ok=True)
-                dest = os.path.join(dest_dir, 'foto_perfil.png')
-
-                try:
-                    from PIL import Image, ImageOps
-                    img = ImageOps.exif_transpose(Image.open(ruta_orig)).convert('RGB')
-                    tmp = os.path.join(dest_dir, '_recorte_temp.png')
-                    img.save(tmp, format='PNG')
-                    img_w, img_h = img.size
-                except Exception as e:
-                    self._mostrar('Error', f'No se pudo abrir la imagen: {e}')
-                    return
-
-                self._abrir_recorte(tmp, img_w, img_h, dest)
+                self._on_foto_temporal(ruta_orig)
 
             filechooser.open_file(
                 on_selection=_on_seleccion,
@@ -259,6 +344,30 @@ class PerfilScreen(MDScreen):
             )
         except Exception as e:
             self._mostrar('Error', f'No se pudo abrir el selector: {e}')
+
+    def _desde_camara(self):
+        if platform != 'android':
+            self._mostrar('Error', 'La cámara solo está disponible en el celular.')
+            return
+        from utils import foto_selector
+        dest_dir, _dest = self._rutas_foto()
+        foto_selector.abrir_camara(dest_dir, self._on_foto_temporal, self._mostrar_error)
+
+    def _on_foto_temporal(self, ruta_temp):
+        dest_dir, dest = self._rutas_foto()
+        try:
+            from PIL import Image, ImageOps
+            img = ImageOps.exif_transpose(Image.open(ruta_temp)).convert('RGB')
+            tmp = os.path.join(dest_dir, '_recorte_temp.png')
+            img.save(tmp, format='PNG')
+            img_w, img_h = img.size
+        except Exception as e:
+            self._mostrar('Error', f'No se pudo abrir la imagen: {e}')
+            return
+        self._abrir_recorte(tmp, img_w, img_h, dest)
+
+    def _mostrar_error(self, texto):
+        self._mostrar('Error', texto)
 
     def _abrir_recorte(self, ruta_temp, img_w, img_h, dest):
         """Popup con arrastre/zoom (Scatter + StencilView) para elegir qué
