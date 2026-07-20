@@ -215,7 +215,17 @@ MDBoxLayout:
             # agregada y con layout resuelto) usan FadeTransition (fluido,
             # sin destello). Ver _ir_a() mas abajo.
             root.ids.sm.transition = NoTransition()
-            self._pantallas_visitadas = {'dashboard'}
+            # OJO: no pre-marcar 'dashboard' como visitada aqui. Aunque se
+            # agrega al arbol de forma sincrona arriba, login_screen.py
+            # navega a dashboard con app.go_to('dashboard') justo despues de
+            # registrarse -- esa es la PRIMERA VEZ que el usuario realmente
+            # VE dashboard, y si ya estuviera marcada como visitada, _ir_a()
+            # elegiria FadeTransition ahi mismo, cayendo en la misma carrera
+            # FBO-antes-de-layout que se esta evitando en las demas
+            # pantallas (confirmado con captura: hueco en dashboard justo
+            # al salir del login, con NoTransition en todas las demas
+            # pantallas funcionando bien).
+            self._pantallas_visitadas = set()
             return root
 
         def on_start(self):
