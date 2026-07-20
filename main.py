@@ -259,7 +259,23 @@ MDBoxLayout:
         def _ir_a(self, screen_name):
             sm = self.root.ids.sm
             primera_vez = screen_name not in self._pantallas_visitadas
-            sm.transition = NoTransition() if primera_vez else FadeTransition()
+            if primera_vez:
+                sm.transition = NoTransition()
+            else:
+                # ShaderTransition.clearcolor (clase base de FadeTransition)
+                # define de que color se limpia el FBO donde se "fotografia"
+                # cada pantalla para el crossfade -- por defecto en Kivy es
+                # [0, 0, 0, 1] (negro), sin relacion con el tema de la app.
+                # Ninguna pantalla pinta su propio fondo (dependen del
+                # Window.clearcolor global que KivyMD ya mantiene sincronizado
+                # con el tema claro/oscuro), asi que cualquier area no
+                # cubierta por widgets dentro de esa foto se veia negra
+                # durante el crossfade (confirmado con capturas: fondo blanco
+                # en la primera visita con NoTransition -- sin Fbo, son
+                # widgets vivos sobre el Window real -- y fondo negro en
+                # visitas siguientes con FadeTransition). Se usa el mismo
+                # color que ya tiene Window.clearcolor en este momento.
+                sm.transition = FadeTransition(clearcolor=Window.clearcolor)
             self._pantallas_visitadas.add(screen_name)
             sm.current = screen_name
 
