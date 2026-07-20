@@ -199,18 +199,23 @@ MDBoxLayout:
             self.notif_manager = NotificacionesManager(self.db)
 
             root = Builder.load_string(_KV)
-            # FadeTransition (ShaderTransition) toma una foto (FBO) de cada
-            # pantalla al tamano que tenga en ese instante y fuerza screen_in
-            # a ese mismo tamano -- si el tamano real de la ventana en
-            # Android todavia no se estabiliza en ese momento (arranque en
-            # frio), esa foto mala queda "pegada" en pantalla. Pero build #52
-            # (con FadeTransition fijo) tenia la navegacion normal perfecta
-            # -- el problema real es solo el arranque en frio, no
-            # FadeTransition en si. Por eso: arranca en NoTransition (modo
-            # seguro mientras Window.size se estabiliza) y se cambia a
-            # FadeTransition despues, una vez pasado ese periodo -- ver
-            # _activar_transicion_normal en on_start().
+            # ScreenManager solo agrega de verdad al arbol de widgets la
+            # PRIMERA pantalla (dashboard, la primera del KV) -- las otras 6
+            # quedan sin agregar hasta su primera navegacion (ver
+            # ScreenManager.add_widget/on_current en kivy/uix/screenmanager.py).
+            # FadeTransition (ShaderTransition.add_screen) fuerza
+            # screen_in.size = screen_out.size y toma una foto FBO en ese
+            # mismo instante -- si esa primera navegacion es tambien la
+            # primera vez que la pantalla se agrega al arbol, la foto queda
+            # tomada ANTES de que su contenido (MDScrollView, alturas
+            # adaptativas) termine su propio primer layout: hueco pegado.
+            # NoTransition.add_screen no fuerza tamano ni toma foto, asi que
+            # no tiene ese problema. Por eso: primera visita a cada pantalla
+            # usa NoTransition (seguro), visitas siguientes (pantalla ya
+            # agregada y con layout resuelto) usan FadeTransition (fluido,
+            # sin destello). Ver _ir_a() mas abajo.
             root.ids.sm.transition = NoTransition()
+            self._pantallas_visitadas = {'dashboard'}
             return root
 
         def on_start(self):
@@ -225,10 +230,13 @@ MDBoxLayout:
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
                 Clock.schedule_once(self._reajustar_layout, delay)
-            Clock.schedule_once(self._activar_transicion_normal, 1.2)
 
-        def _activar_transicion_normal(self, dt):
-            self.root.ids.sm.transition = FadeTransition()
+        def _ir_a(self, screen_name):
+            sm = self.root.ids.sm
+            primera_vez = screen_name not in self._pantallas_visitadas
+            sm.transition = NoTransition() if primera_vez else FadeTransition()
+            self._pantallas_visitadas.add(screen_name)
+            sm.current = screen_name
 
         def _reajustar_layout(self, dt):
             # En el arranque en frío en Android, Window a veces reporta un
@@ -264,7 +272,7 @@ MDBoxLayout:
         def go_to(self, screen_name):
             sm = self.root.ids.sm
             if sm.current != screen_name:
-                sm.current = screen_name
+                self._ir_a(screen_name)
             if screen_name != 'login':
                 bar = self.root.ids.bottom_bar
                 bar.opacity = 1
@@ -282,7 +290,7 @@ MDBoxLayout:
 
         def go_back(self):
             sm = self.root.ids.sm
-            sm.current = self._PARENT_SCREEN.get(sm.current, 'dashboard')
+            self._ir_a(self._PARENT_SCREEN.get(sm.current, 'dashboard'))
 
         def actualizar_foto_dashboard(self):
             try:
