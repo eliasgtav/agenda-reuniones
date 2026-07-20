@@ -98,7 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
-    from kivy.uix.screenmanager import ScreenManager, NoTransition
+    from kivy.uix.screenmanager import ScreenManager, NoTransition, FadeTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
     # (p.ej. "Notas adicionales" y los botones bajo él).
@@ -202,18 +202,14 @@ MDBoxLayout:
             # FadeTransition (ShaderTransition) toma una foto (FBO) de cada
             # pantalla al tamano que tenga en ese instante y fuerza screen_in
             # a ese mismo tamano -- si el tamano real de la ventana en
-            # Android todavia no se estabiliza en ese momento, esa foto mala
-            # queda "pegada" en pantalla (hueco arriba, contenido tapado)
-            # aunque el layout real ya este bien despues.
-            # SlideTransition evitaba ese bug (no usa Fbo) pero seguia
-            # mostrando un destello al salir de Detalle -- se rastreo a
-            # eventos de Clock.schedule_once (carga inicial + reintentos de
-            # scroll) que quedaban pendientes y disparaban sobre la pantalla
-            # ya no-actual durante la animacion. Con esos ya cancelados en
-            # on_leave(), se vuelve a NoTransition (cambio instantaneo, cero
-            # riesgo de que ambas pantallas se vean a la vez) para
-            # confirmar si el destello era de la animacion o de esos
-            # eventos.
+            # Android todavia no se estabiliza en ese momento (arranque en
+            # frio), esa foto mala queda "pegada" en pantalla. Pero build #52
+            # (con FadeTransition fijo) tenia la navegacion normal perfecta
+            # -- el problema real es solo el arranque en frio, no
+            # FadeTransition en si. Por eso: arranca en NoTransition (modo
+            # seguro mientras Window.size se estabiliza) y se cambia a
+            # FadeTransition despues, una vez pasado ese periodo -- ver
+            # _activar_transicion_normal en on_start().
             root.ids.sm.transition = NoTransition()
             return root
 
@@ -229,6 +225,10 @@ MDBoxLayout:
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
                 Clock.schedule_once(self._reajustar_layout, delay)
+            Clock.schedule_once(self._activar_transicion_normal, 1.2)
+
+        def _activar_transicion_normal(self, dt):
+            self.root.ids.sm.transition = FadeTransition()
 
         def _reajustar_layout(self, dt):
             # En el arranque en frío en Android, Window a veces reporta un
