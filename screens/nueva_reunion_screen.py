@@ -34,8 +34,6 @@ Builder.load_string('''
                 MDTextField:
                     id: asunto_field
                     hint_text: "Asunto de la reunión *"
-                    helper_text: "Campo obligatorio"
-                    helper_text_mode: "on_error"
                     mode: "rectangle"
                     font_size: '15sp'
                     on_text: self.text = self.text.upper()
@@ -127,12 +125,6 @@ Builder.load_string('''
                     font_size: '15sp'
                     size_hint_x: .75
                     on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('nuevo_participante')
 
                 MDIconButton:
                     id: participante_mic
@@ -234,6 +226,7 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '180dp'
                 font_size: '15sp'
+                on_text: self.text = self.text.upper()
 
             MDLabel:
                 id: lbl_voz_estado
