@@ -45,9 +45,9 @@ def abrir_galeria(dest_dir, on_seleccionado, on_error=None):
             try:
                 ruta = _copiar_uri_a_archivo(uri, dest_dir, 'seleccion_galeria')
             except Exception as e:
+                mensaje = f'No se pudo leer la imagen: {e}'
                 if on_error:
-                    Clock.schedule_once(lambda dt: on_error(
-                        f'No se pudo leer la imagen: {e}'), 0)
+                    Clock.schedule_once(lambda dt: on_error(mensaje), 0)
                 return
             Clock.schedule_once(lambda dt: on_seleccionado(ruta), 0)
 
@@ -111,9 +111,9 @@ def _lanzar_camara(dest_dir, on_seleccionado, on_error):
                     raise ValueError('la cámara no devolvió una imagen')
                 ruta = _guardar_bitmap(bitmap, dest_dir, 'seleccion_camara')
             except Exception as e:
+                mensaje = f'No se pudo guardar la foto: {e}'
                 if on_error:
-                    Clock.schedule_once(lambda dt: on_error(
-                        f'No se pudo guardar la foto: {e}'), 0)
+                    Clock.schedule_once(lambda dt: on_error(mensaje), 0)
                 return
             Clock.schedule_once(lambda dt: on_seleccionado(ruta), 0)
 
