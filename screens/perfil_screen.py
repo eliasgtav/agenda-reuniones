@@ -50,7 +50,7 @@ Builder.load_string('''
                     id: foto_card
                     size_hint: None, None
                     size: '140dp', '140dp'
-                    radius: [70]
+                    radius: [dp(70)]
                     elevation: 4
                     md_bg_color: .85, .85, .85, 1
                     ripple_behavior: True

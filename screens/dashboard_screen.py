@@ -36,7 +36,7 @@ Builder.load_string('''
                     id: avatar_card
                     size_hint: None, None
                     size: '64dp', '64dp'
-                    radius: [32]
+                    radius: [dp(32)]
                     md_bg_color: .75, .75, .75, 1
 
                     RecorteCircular:
