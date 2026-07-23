@@ -414,7 +414,10 @@ class PerfilScreen(MDScreen):
 
         scatter.bind(pos=_limitar, scale=_limitar)
 
-        contenedor = AnchorLayout(size_hint_y=None, height=marco, anchor_x='center', anchor_y='center')
+        contenedor = AnchorLayout(
+            size_hint=(None, None), size=(marco, marco),
+            pos_hint={'center_x': 0.5}, anchor_x='center', anchor_y='center',
+        )
         contenedor.add_widget(stencil)
 
         raiz = MDBoxLayout(orientation='vertical', spacing=dp(12), padding=dp(16), adaptive_height=True)
