@@ -23,7 +23,6 @@ _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
 _LADO_RECORTE = 480
 
 Builder.load_string('''
-#:import RecorteCircular utils.circular_image.RecorteCircular
 <PerfilScreen>:
     MDScrollView:
         id: scroll_view
@@ -56,15 +55,12 @@ Builder.load_string('''
                     ripple_behavior: True
                     on_release: root.elegir_foto()
 
-                    RecorteCircular:
+                    Image:
+                        id: foto_img
+                        source: ""
+                        allow_stretch: True
+                        keep_ratio: False
                         size_hint: 1, 1
-
-                        Image:
-                            id: foto_img
-                            source: ""
-                            allow_stretch: True
-                            keep_ratio: False
-                            size_hint: 1, 1
 
             MDLabel:
                 text: "Toca la foto para cambiarla"
@@ -469,7 +465,7 @@ class PerfilScreen(MDScreen):
         popup.open()
 
     def _guardar_recorte(self, ruta_temp, img_w, img_h, scatter, marco, dest):
-        from PIL import Image
+        from PIL import Image, ImageDraw
         x, y = scatter.pos
         s = scatter.scale
 
@@ -484,6 +480,17 @@ class PerfilScreen(MDScreen):
         img = Image.open(ruta_temp).convert('RGB')
         img = img.crop((x0, y0, x1, y1))
         img = img.resize((_LADO_RECORTE, _LADO_RECORTE), Image.LANCZOS)
+
+        # Se recorta a circulo aqui mismo (con PIL, al guardar) en vez de
+        # recortar en vivo con StencilView de Kivy: en algunos dispositivos
+        # el stencil buffer de OpenGL no esta disponible y Kivy no recorta
+        # nada (o directamente no dibuja el widget), asi que un circulo
+        # "en vivo" no es confiable. Un PNG con canal alfa circular si
+        # funciona igual en cualquier dispositivo.
+        mascara = Image.new('L', (_LADO_RECORTE, _LADO_RECORTE), 0)
+        ImageDraw.Draw(mascara).ellipse((0, 0, _LADO_RECORTE, _LADO_RECORTE), fill=255)
+        img = img.convert('RGBA')
+        img.putalpha(mascara)
         img.save(dest, format='PNG')
 
         # foto_perfil.png es siempre el mismo nombre de archivo: Kivy cachea
