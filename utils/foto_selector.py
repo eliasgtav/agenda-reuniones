@@ -105,10 +105,12 @@ def _lanzar_camara(dest_dir, on_seleccionado, on_error):
             if result_code != Activity.RESULT_OK or data is None:
                 return
             try:
+                from jnius import cast
                 extras = data.getExtras()
                 bitmap = extras.getParcelable('data') if extras else None
                 if bitmap is None:
                     raise ValueError('la cámara no devolvió una imagen')
+                bitmap = cast('android.graphics.Bitmap', bitmap)
                 ruta = _guardar_bitmap(bitmap, dest_dir, 'seleccion_camara')
             except Exception as e:
                 mensaje = f'No se pudo guardar la foto: {e}'
