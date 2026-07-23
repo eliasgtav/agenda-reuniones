@@ -10,6 +10,7 @@ from kivymd.uix.button import MDRaisedButton
 from utils.config import cargar as cargar_config
 
 Builder.load_string('''
+#:import RecorteCircular utils.circular_image.RecorteCircular
 <DashboardScreen>:
     MDScrollView:
         id: scroll_view
@@ -38,11 +39,15 @@ Builder.load_string('''
                     radius: [32]
                     md_bg_color: .75, .75, .75, 1
 
-                    Image:
-                        id: avatar_img
-                        source: ""
-                        allow_stretch: True
-                        keep_ratio: False
+                    RecorteCircular:
+                        size_hint: 1, 1
+
+                        Image:
+                            id: avatar_img
+                            source: ""
+                            allow_stretch: True
+                            keep_ratio: False
+                            size_hint: 1, 1
 
                 MDBoxLayout:
                     orientation: 'vertical'

@@ -23,6 +23,7 @@ _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
 _LADO_RECORTE = 480
 
 Builder.load_string('''
+#:import RecorteCircular utils.circular_image.RecorteCircular
 <PerfilScreen>:
     MDScrollView:
         id: scroll_view
@@ -55,12 +56,15 @@ Builder.load_string('''
                     ripple_behavior: True
                     on_release: root.elegir_foto()
 
-                    Image:
-                        id: foto_img
-                        source: ""
-                        allow_stretch: True
-                        keep_ratio: False
+                    RecorteCircular:
                         size_hint: 1, 1
+
+                        Image:
+                            id: foto_img
+                            source: ""
+                            allow_stretch: True
+                            keep_ratio: False
+                            size_hint: 1, 1
 
             MDLabel:
                 text: "Toca la foto para cambiarla"
