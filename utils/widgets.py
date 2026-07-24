@@ -1,9 +1,10 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 """Campo de texto con corrección ortográfica en español: sugerencias, sin
 autocorregir solo. Al pausar de escribir, si la última palabra no se
-reconoce, el borde del campo se resalta y aparece una barra flotante con
-hasta 3 sugerencias tocables debajo del campo enfocado. El usuario elige
-tocando una sugerencia; si no toca ninguna, el texto se queda como está."""
+reconoce, aparece una barra flotante con hasta 3 sugerencias tocables
+debajo del campo enfocado (sin cambiar la apariencia del campo). El
+usuario elige tocando una sugerencia; si no toca ninguna, el texto se
+queda como está."""
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp
@@ -13,9 +14,6 @@ from kivymd.uix.textfield import MDTextField
 
 from utils.ortografia import sugerencias
 
-_COLOR_AVISO = (0.95, 0.6, 0.1, 1)  # naranja: aviso de ortografía, distinto
-                                     # del rojo que ya se usa para "campo
-                                     # obligatorio vacío"
 _PUNTUACION = '.,;:!?¡¿"\'()'
 
 
@@ -60,13 +58,29 @@ class _BarraSugerencias(MDCard):
                 text=opcion,
                 font_size='13sp',
                 size_hint_y=None,
-                height=dp(32),
-                on_release=lambda _inst, o=opcion: self._elegir(o),
+                height=dp(36),
+                # on_press (toque inicial), no on_release: FocusBehavior
+                # desenfoca TODOS los campos enfocados justo despues de
+                # CUALQUIER touch_up en la pantalla (ver
+                # kivy/uix/behaviors/focus.py::_handle_post_on_touch_up),
+                # asi que conviene reemplazar la palabra en cuanto el dedo
+                # toca el boton, no esperar a que lo suelte.
+                on_press=lambda _inst, o=opcion: self._elegir(o),
             ))
-        x, y = campo.to_window(campo.x, campo.y)
-        self.pos = (x, y - self.height - dp(4))
         if self not in Window.children:
             Window.add_widget(self)
+        # Reposicionar un frame despues: adaptive_size recalcula
+        # self.height de forma diferida (tras el layout de los botones
+        # recien agregados), así que leerlo en el mismo tick daría un
+        # valor viejo (o 0 la primera vez) y la barra quedaría mal
+        # posicionada / superpuesta con el campo.
+        Clock.schedule_once(lambda _dt: self._reposicionar(campo), 0)
+
+    def _reposicionar(self, campo):
+        if self.campo is not campo:
+            return
+        x, y = campo.to_window(campo.x, campo.y)
+        self.pos = (x, y - self.height - dp(4))
 
     def ocultar(self, campo=None):
         if campo is not None and self.campo is not campo:
@@ -79,7 +93,10 @@ class _BarraSugerencias(MDCard):
         campo = self.campo
         self.ocultar()
         if campo is not None:
-            campo.reemplazar_ultima_palabra(opcion)
+            # Un frame despues, ya resuelto el touch_up completo (incluido
+            # el desenfoque global de FocusBehavior), para no competir con
+            # el resto del manejo de ese mismo toque.
+            Clock.schedule_once(lambda _dt: campo.reemplazar_ultima_palabra(opcion), 0)
 
 
 _barra = None
@@ -120,7 +137,6 @@ class CampoOrtografico(MDTextField):
         if self._revision_evento is not None:
             self._revision_evento.cancel()
             self._revision_evento = None
-        self.error = False
         _obtener_barra().ocultar(self)
 
     def _ultima_palabra_cruda(self):
@@ -131,13 +147,9 @@ class CampoOrtografico(MDTextField):
         crudo = self._ultima_palabra_cruda()
         _prefijo, palabra, _sufijo = _separar_puntuacion(crudo)
         opciones = sugerencias(palabra) if palabra else []
-        if opciones:
-            self.error_color = _COLOR_AVISO
-            self.error = True
-            if self.focus:
-                _obtener_barra().mostrar(self, opciones)
+        if opciones and self.focus:
+            _obtener_barra().mostrar(self, opciones)
         else:
-            self.error = False
             _obtener_barra().ocultar(self)
 
     def reemplazar_ultima_palabra(self, opcion):
@@ -152,4 +164,3 @@ class CampoOrtografico(MDTextField):
             return
         reemplazo = prefijo + opcion + sufijo
         self.text = derecha[:idx] + reemplazo + texto[idx + len(crudo):]
-        self.error = False
