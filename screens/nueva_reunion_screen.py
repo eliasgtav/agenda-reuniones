@@ -11,6 +11,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <NuevaReunionScreen>:
@@ -31,7 +32,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: asunto_field
                     hint_text: "Asunto de la reunión *"
                     mode: "rectangle"
@@ -87,7 +88,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: lugar_field
                     hint_text: "Lugar"
                     mode: "rectangle"
@@ -118,7 +119,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: nuevo_participante
                     hint_text: "Nombre del participante"
                     mode: "rectangle"
@@ -218,7 +219,7 @@ Builder.load_string('''
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('notas_field', 'notas_mic')
 
-            MDTextField:
+            CampoOrtografico:
                 id: notas_field
                 hint_text: "Escribe las notas con lápiz, teclado o voz..."
                 mode: "rectangle"

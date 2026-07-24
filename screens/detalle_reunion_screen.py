@@ -17,6 +17,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <DetalleReunionScreen>:
@@ -108,7 +109,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: nuevo_participante
                     hint_text: "Agregar participante"
                     mode: "rectangle"
@@ -163,7 +164,7 @@ Builder.load_string('''
                         icon_color: 0.80, 0.13, 0.13, 1
                         on_release: root.limpiar_trabajo()
 
-                MDTextField:
+                CampoOrtografico:
                     id: trabajo_field
                     hint_text: "Redacta aquí con lápiz, teclado o voz..."
                     mode: "rectangle"
@@ -203,7 +204,7 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_notas()
 
-            MDTextField:
+            CampoOrtografico:
                 id: notas_field
                 hint_text: "Escribe las notas con lápiz o teclado..."
                 mode: "rectangle"
@@ -227,7 +228,7 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_conclusion()
 
-            MDTextField:
+            CampoOrtografico:
                 id: conclusion_field
                 hint_text: "Escribe la conclusión con lápiz o teclado..."
                 mode: "rectangle"
@@ -920,7 +921,7 @@ class DetalleReunionScreen(MDScreen):
         from kivymd.uix.textfield import MDTextField as TF
         from kivymd.uix.button import MDRaisedButton as MRB
 
-        campo_texto = TF(hint_text='Descripción del acuerdo', mode='rectangle')
+        campo_texto = CampoOrtografico(hint_text='Descripción del acuerdo', mode='rectangle')
         campo_plazo = TF(hint_text='Plazo (YYYY-MM-DD)', mode='rectangle')
         campo_plazo.bind(on_focus=lambda inst, val: self._abrir_cal_acuerdo(inst, campo_plazo) if val else None)
 

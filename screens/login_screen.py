@@ -6,6 +6,7 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
 from utils.voz import DictadoVoz
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <LoginScreen>:
@@ -48,7 +49,7 @@ Builder.load_string('''
             adaptive_height: True
             spacing: '8dp'
 
-            MDTextField:
+            CampoOrtografico:
                 id: nombres_field
                 hint_text: "Nombres *"
                 mode: "rectangle"
@@ -74,7 +75,7 @@ Builder.load_string('''
             adaptive_height: True
             spacing: '8dp'
 
-            MDTextField:
+            CampoOrtografico:
                 id: apellidos_field
                 hint_text: "Apellidos *"
                 mode: "rectangle"

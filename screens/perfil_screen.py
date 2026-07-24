@@ -17,6 +17,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
 from utils.voz import DictadoVoz
+from utils.widgets import CampoOrtografico
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -73,7 +74,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: nombres_field
                     hint_text: "Nombres *"
                     mode: "rectangle"
@@ -98,7 +99,7 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                MDTextField:
+                CampoOrtografico:
                     id: apellidos_field
                     hint_text: "Apellidos *"
                     mode: "rectangle"

@@ -12,6 +12,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.card import MDCard
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <EnReunionScreen>:
@@ -90,7 +91,7 @@ Builder.load_string('''
             text_color: 0.13, 0.55, 0.13, 1
 
         # Campo de entrada
-        MDTextField:
+        CampoOrtografico:
             id: entrada_field
             hint_text: "Escribe el acuerdo con lápiz, teclado o voz..."
             mode: "rectangle"

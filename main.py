@@ -230,6 +230,8 @@ MDBoxLayout:
 
         def on_start(self):
             from utils.config import cargar
+            from utils.ortografia import precargar
+            precargar()
             config = cargar()
             if not config.get('registrado'):
                 self.root.ids.sm.current = 'login'

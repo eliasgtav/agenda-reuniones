@@ -3,6 +3,7 @@ kivy==2.3.1
 openpyxl==3.1.2
 plyer==2.1.0
 pillow==10.3.0
+pyspellchecker
 pyttsx3
 SpeechRecognition
 PyAudio

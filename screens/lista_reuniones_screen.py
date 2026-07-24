@@ -10,6 +10,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from utils.exportar import exportar_excel
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <ListaReunionesScreen>:
@@ -18,7 +19,7 @@ Builder.load_string('''
         padding: '8dp'
         spacing: '6dp'
 
-        MDTextField:
+        CampoOrtografico:
             id: busqueda_field
             hint_text: "Buscar por asunto o lugar..."
             mode: "rectangle"
