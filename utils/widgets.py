@@ -13,6 +13,7 @@ from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.textfield import MDTextField
 
 from utils.ortografia import sugerencias
+from utils import teclado
 
 _PUNTUACION = '.,;:!?¡¿"\'()'
 
@@ -49,6 +50,7 @@ class _BarraSugerencias(MDCard):
             **kwargs,
         )
         self.campo = None
+        self._reposicion_evento = None
 
     def mostrar(self, campo, opciones):
         self.campo = campo
@@ -69,23 +71,41 @@ class _BarraSugerencias(MDCard):
             ))
         if self not in Window.children:
             Window.add_widget(self)
-        # Reposicionar un frame despues: adaptive_size recalcula
-        # self.height de forma diferida (tras el layout de los botones
-        # recien agregados), así que leerlo en el mismo tick daría un
-        # valor viejo (o 0 la primera vez) y la barra quedaría mal
-        # posicionada / superpuesta con el campo.
-        Clock.schedule_once(lambda _dt: self._reposicionar(campo), 0)
+        # Reposicionar en un intervalo, no una sola vez: (a) adaptive_size
+        # recalcula self.height de forma diferida (tras el layout de los
+        # botones recien agregados), asi que leerlo en el mismo tick daria
+        # un valor viejo (o 0 la primera vez); (b) la altura del teclado
+        # (ver utils/teclado.py) se mide por polling y puede seguir
+        # cambiando mientras el teclado termina de animarse hacia arriba.
+        if self._reposicion_evento is not None:
+            self._reposicion_evento.cancel()
+        self._reposicion_evento = Clock.schedule_interval(
+            lambda _dt: self._reposicionar(campo), 0.15
+        )
 
     def _reposicionar(self, campo):
         if self.campo is not campo:
             return
-        x, y = campo.to_window(campo.x, campo.y)
-        self.pos = (x, y - self.height - dp(4))
+        alto_teclado = teclado.altura_teclado()
+        if alto_teclado > 0:
+            # Como en WhatsApp: barra de ancho completo pegada justo
+            # encima del teclado, no importa donde este el campo en la
+            # pantalla (si esta cerca del final, el teclado la tapa).
+            self.adaptive_width = False
+            self.width = Window.width
+            self.pos = (0, alto_teclado)
+        else:
+            self.adaptive_width = True
+            x, y = campo.to_window(campo.x, campo.y)
+            self.pos = (x, y - self.height - dp(4))
 
     def ocultar(self, campo=None):
         if campo is not None and self.campo is not campo:
             return
         self.campo = None
+        if self._reposicion_evento is not None:
+            self._reposicion_evento.cancel()
+            self._reposicion_evento = None
         if self in Window.children:
             Window.remove_widget(self)
 
@@ -164,3 +184,28 @@ class CampoOrtografico(MDTextField):
             return
         reemplazo = prefijo + opcion + sufijo
         self.text = derecha[:idx] + reemplazo + texto[idx + len(crudo):]
+        # Kivy no reubica self.cursor al cambiar self.text a mano: si se
+        # deja apuntando a la posicion vieja (p.ej. porque "opcion" es mas
+        # corta que "crudo"), la siguiente tecla que el usuario escriba
+        # hace que TextInput.insert_text indexe una fila que ya no existe
+        # y crashea con IndexError. Se reubica al final de la palabra
+        # reemplazada, que es donde el usuario esperaria seguir escribiendo.
+        self.cursor = self.get_cursor_from_index(idx + len(reemplazo))
+
+
+class CampoOraciones(CampoOrtografico):
+    """CampoOrtografico que ademas pone en mayúscula la primera letra de
+    cada oración (inicio del texto, o tras '.', '!', '?' o un salto de
+    línea) a medida que se escribe. Se implementa sobre insert_text (el
+    mismo mecanismo que usa Kivy para insertar cada tecla/IME), no
+    reasignando self.text, para no repetir el bug de cursor desincronizado
+    de reemplazar_ultima_palabra."""
+
+    def insert_text(self, substring, from_undo=False):
+        if substring and not from_undo and self._inicia_oracion():
+            substring = substring[0].upper() + substring[1:]
+        return super().insert_text(substring, from_undo=from_undo)
+
+    def _inicia_oracion(self):
+        antes = self.text[:self.cursor_index()].rstrip(' \t')
+        return not antes or antes[-1] in '.!?\n'

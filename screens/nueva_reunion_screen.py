@@ -124,29 +124,35 @@ Builder.load_string('''
                     hint_text: "Nombre del participante"
                     mode: "rectangle"
                     font_size: '15sp'
-                    size_hint_x: .75
+                    size_hint_x: 1
                     on_text: self.text = self.text.upper()
 
-                MDIconButton:
-                    id: participante_mic
-                    icon: "microphone"
+                MDBoxLayout:
+                    adaptive_height: True
                     size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('nuevo_participante', 'participante_mic')
+                    width: '100dp'
+                    spacing: '2dp'
 
-                MDIconButton:
-                    icon: "account-plus"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.agregar_participante_ui()
+                    MDIconButton:
+                        id: participante_mic
+                        icon: "microphone"
+                        size_hint_x: None
+                        width: '32dp'
+                        theme_icon_color: "Custom"
+                        icon_color: 0.13, 0.40, 0.75, 1
+                        on_release: root.toggle_voz('nuevo_participante', 'participante_mic')
 
-                MDIconButton:
-                    icon: "contacts"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.elegir_contacto()
+                    MDIconButton:
+                        icon: "account-plus"
+                        size_hint_x: None
+                        width: '32dp'
+                        on_release: root.agregar_participante_ui()
+
+                    MDIconButton:
+                        icon: "contacts"
+                        size_hint_x: None
+                        width: '32dp'
+                        on_release: root.elegir_contacto()
 
             MDBoxLayout:
                 id: participantes_list

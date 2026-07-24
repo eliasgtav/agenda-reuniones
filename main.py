@@ -231,7 +231,9 @@ MDBoxLayout:
         def on_start(self):
             from utils.config import cargar
             from utils.ortografia import precargar
+            from utils.teclado import iniciar_monitoreo
             precargar()
+            iniciar_monitoreo()
             config = cargar()
             if not config.get('registrado'):
                 self.root.ids.sm.current = 'login'

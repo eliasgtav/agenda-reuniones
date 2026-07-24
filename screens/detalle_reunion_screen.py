@@ -17,7 +17,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoOrtografico, CampoOraciones
 
 Builder.load_string('''
 <DetalleReunionScreen>:
@@ -114,6 +114,7 @@ Builder.load_string('''
                     hint_text: "Agregar participante"
                     mode: "rectangle"
                     size_hint_x: .8
+                    on_text: self.text = self.text.upper()
 
                 MDIconButton:
                     icon: "account-plus"
@@ -228,7 +229,7 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_conclusion()
 
-            CampoOrtografico:
+            CampoOraciones:
                 id: conclusion_field
                 hint_text: "Escribe la conclusión con lápiz o teclado..."
                 mode: "rectangle"
