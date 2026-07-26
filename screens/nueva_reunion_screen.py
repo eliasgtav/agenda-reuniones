@@ -233,7 +233,6 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '180dp'
                 font_size: '15sp'
-                on_text: self.text = self.text.upper()
 
             MDLabel:
                 id: lbl_voz_estado
