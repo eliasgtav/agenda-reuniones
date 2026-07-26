@@ -165,7 +165,7 @@ Builder.load_string('''
                         icon_color: 0.80, 0.13, 0.13, 1
                         on_release: root.limpiar_trabajo()
 
-                CampoOrtografico:
+                CampoOraciones:
                     id: trabajo_field
                     hint_text: "Redacta aquí con lápiz, teclado o voz..."
                     mode: "rectangle"
@@ -205,7 +205,7 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_notas()
 
-            CampoOrtografico:
+            CampoOraciones:
                 id: notas_field
                 hint_text: "Escribe las notas con lápiz o teclado..."
                 mode: "rectangle"

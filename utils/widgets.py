@@ -8,6 +8,7 @@ queda como está."""
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp
+from kivy.utils import platform
 from kivymd.uix.card import MDCard
 from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.textfield import MDTextField
@@ -86,11 +87,23 @@ class _BarraSugerencias(MDCard):
     def _reposicionar(self, campo):
         if self.campo is not campo:
             return
-        alto_teclado = teclado.altura_teclado()
-        if alto_teclado > 0:
-            # Como en WhatsApp: barra de ancho completo pegada justo
-            # encima del teclado, no importa donde este el campo en la
-            # pantalla (si esta cerca del final, el teclado la tapa).
+        if platform == 'android':
+            # En Android, Window.softinput_mode ("below_target", puesto en
+            # main.py) NO hace nada con el bootstrap SDL2 -- Window.
+            # keyboard_height siempre da 0 ahi (confirmado en el codigo
+            # fuente de Kivy), asi que Kivy nunca reacomoda nada por su
+            # cuenta. Por eso NO conviene usar la posicion del campo
+            # (campo.to_window) como respaldo: si el campo es grande y
+            # esta bajo en la pantalla, esa posicion puede quedar detras
+            # del teclado. En vez de eso, siempre se pega la barra al
+            # teclado medido (utils/teclado.py); si todavia no hay una
+            # medicion (el polling de 0.3s no alcanzo a correr, o el
+            # campo acaba de recibir foco hace un instante), se asume una
+            # altura conservadora mientras el campo siga enfocado, en vez
+            # de caer detras de donde probablemente este el teclado.
+            alto_teclado = teclado.altura_teclado()
+            if alto_teclado <= 0 and campo.focus:
+                alto_teclado = Window.height * 0.35
             self.adaptive_width = False
             self.width = Window.width
             self.pos = (0, alto_teclado)
