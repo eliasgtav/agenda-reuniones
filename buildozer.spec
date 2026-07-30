@@ -29,10 +29,14 @@ android.archs = arm64-v8a
 # la app) con otras apps (visor de PDF, imagenes, etc.) -- ver
 # utils/abrir_archivo.py. Sin esto, Android bloquea compartir un file://
 # de almacenamiento privado con FileUriExposedException.
+# El <provider> del FileProvider NO se declara aqui (la opcion
+# "android.extra_manifest_application_arguments" solo permite agregar
+# ATRIBUTOS a la etiqueta <application>, no elementos hijos completos --
+# ver scripts/patch_p4a.py, parche #3). Se inserta parcheando el template
+# de p4a directamente.
 android.enable_androidx = True
 android.gradle_dependencies = androidx.core:core:1.12.0
 android.add_resources = android_res
-android.extra_manifest_application_arguments = ./src/android/extra_manifest_application_arguments.xml
 
 [buildozer]
 log_level = 2

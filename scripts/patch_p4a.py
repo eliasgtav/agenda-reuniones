@@ -32,6 +32,21 @@ contra el codigo actual del recipe python3):
    `adb shell run-as <paquete> cat files/startc_diag.txt` incluso si la
    app crashea) + fix de la condicion de carrera donde ANDROID_ARGUMENT
    puede llegar NULL de Java antes que SDL lo setee.
+3. AndroidManifest.tmpl.xml (bootstrap _sdl_common, usado por sdl2):
+   inserta el <provider> de FileProvider (para "abrir adjunto", ver
+   utils/abrir_archivo.py) directo en el template. Es necesario parchear
+   el template en vez de usar la opcion de buildozer.spec
+   "android.extra_manifest_application_arguments": se confirmo leyendo el
+   template real de p4a que esa variable se sustituye DENTRO de la lista
+   de atributos de la etiqueta de apertura <application ...>, no como
+   contenido/hijo del elemento -- insertar ahi un <provider>...</provider>
+   (un elemento hijo completo) genera XML invalido y
+   "com.android.manifmerger.ManifestMerger2$MergeFailureException: Error
+   parsing AndroidManifest.xml" en Gradle (visto en build real, run
+   30511153156, commit c427165). Tampoco sirve
+   "android.extra_manifest_xml": ese inserta dentro de <manifest>, como
+   hermano de <application>, pero <provider> debe ser hijo de
+   <application> segun el schema de Android.
 """
 
 import os
@@ -172,3 +187,33 @@ static void diag_write(const char *msg) {
     print('start.c parcheado')
 else:
     print('WARN: start.c no encontrado (se parcheara al buildear cuando este disponible)')
+
+# --- 3. AndroidManifest.tmpl.xml (bootstrap _sdl_common): insertar <provider> ---
+manifest_tmpl_path = (
+    '.buildozer/android/platform/python-for-android/pythonforandroid/'
+    'bootstraps/_sdl_common/build/templates/AndroidManifest.tmpl.xml'
+)
+if os.path.exists(manifest_tmpl_path):
+    c = open(manifest_tmpl_path).read()
+    marker = '    </application>'
+    PROVIDER_XML = '''        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.eliasgt.agenda.agendareuniones.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+'''
+    if 'androidx.core.content.FileProvider' in c:
+        print('AndroidManifest.tmpl.xml: ya tiene el <provider> de FileProvider')
+    elif marker in c:
+        c = c.replace(marker, PROVIDER_XML + marker, 1)
+        open(manifest_tmpl_path, 'w').write(c)
+        print('AndroidManifest.tmpl.xml parcheado: <provider> de FileProvider insertado')
+    else:
+        print('WARN: marcador "</application>" no encontrado en AndroidManifest.tmpl.xml '
+              '(revisar si el template de p4a cambio)')
+else:
+    print(f'WARN: {manifest_tmpl_path} no encontrado')
