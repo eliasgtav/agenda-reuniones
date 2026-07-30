@@ -537,6 +537,10 @@ class DetalleReunionScreen(MDScreen):
                 btn_play = MDIconButton(icon=icono, size_hint_x=None, width=dp(40))
                 btn_play.bind(on_release=lambda _, i=aid, r=a['ruta'], b=btn_play: self._toggle_reproducir(i, r, b))
                 fila.add_widget(btn_play)
+            else:
+                btn_abrir = MDIconButton(icon='open-in-new', size_hint_x=None, width=dp(40))
+                btn_abrir.bind(on_release=lambda _, r=a['ruta'], n=a['nombre']: self._abrir_archivo(r, n))
+                fila.add_widget(btn_abrir)
             btn_del = MDIconButton(icon='delete', size_hint_x=None, width=dp(40))
             btn_del.bind(on_release=lambda _, i=aid: self._borrar_archivo(i))
             fila.add_widget(btn_del)
@@ -665,6 +669,19 @@ class DetalleReunionScreen(MDScreen):
         dialog.open()
 
     def adjuntar_archivo(self):
+        if platform == 'android':
+            from android.storage import app_storage_path
+            from utils.archivo_selector import abrir_selector
+            dest_dir = os.path.join(app_storage_path(), 'adjuntos')
+
+            def _on_ok(ruta, nombre):
+                db = App.get_running_app().db
+                db.agregar_archivo(self._reunion_id, nombre, ruta)
+                self._cargar_archivos(db)
+
+            abrir_selector(dest_dir, _on_ok, lambda msg: self._mostrar_info('Error', msg))
+            return
+
         try:
             from plyer import filechooser
 
@@ -673,11 +690,7 @@ class DetalleReunionScreen(MDScreen):
                     return
                 ruta_orig = seleccion[0]
                 nombre = os.path.basename(ruta_orig)
-                if platform == 'android':
-                    from android.storage import app_storage_path
-                    dest_dir = os.path.join(app_storage_path(), 'adjuntos')
-                else:
-                    dest_dir = os.path.join(os.path.expanduser('~'), 'agenda_adjuntos')
+                dest_dir = os.path.join(os.path.expanduser('~'), 'agenda_adjuntos')
                 os.makedirs(dest_dir, exist_ok=True)
                 dest = os.path.join(dest_dir, nombre)
                 shutil.copy2(ruta_orig, dest)
@@ -688,6 +701,10 @@ class DetalleReunionScreen(MDScreen):
             filechooser.open_file(on_selection=_on_seleccion)
         except Exception as e:
             self._mostrar_info('Error', str(e))
+
+    def _abrir_archivo(self, ruta, nombre):
+        from utils.abrir_archivo import abrir
+        abrir(ruta, nombre, on_error=lambda msg: self._mostrar_info('Abrir archivo', msg))
 
     def cambiar_estado(self, nuevo_estado):
         db = App.get_running_app().db

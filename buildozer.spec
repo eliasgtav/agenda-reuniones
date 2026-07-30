@@ -25,6 +25,15 @@ android.sdk = 35
 android.accept_sdk_license = True
 android.archs = arm64-v8a
 
+# FileProvider para poder abrir archivos adjuntos (almacenamiento privado de
+# la app) con otras apps (visor de PDF, imagenes, etc.) -- ver
+# utils/abrir_archivo.py. Sin esto, Android bloquea compartir un file://
+# de almacenamiento privado con FileUriExposedException.
+android.enable_androidx = True
+android.gradle_dependencies = androidx.core:core:1.12.0
+android.add_resources = android_res
+android.extra_manifest_application_arguments = ./src/android/extra_manifest_application_arguments.xml
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
