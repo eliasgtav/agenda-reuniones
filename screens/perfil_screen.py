@@ -95,6 +95,12 @@ Builder.load_string('''
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('nombres_field', 'nombres_mic')
 
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('nombres_field')
+
             MDBoxLayout:
                 adaptive_height: True
                 spacing: '8dp'
@@ -119,6 +125,12 @@ Builder.load_string('''
                     theme_icon_color: "Custom"
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('apellidos_field', 'apellidos_mic')
+
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('apellidos_field')
 
             MDLabel:
                 id: lbl_voz_estado
@@ -257,6 +269,11 @@ class PerfilScreen(MDScreen):
 
     def enfocar(self, field_id):
         self.ids[field_id].focus = True
+
+    def borrar_seleccion(self, field_id):
+        campo = self.ids[field_id]
+        if campo.selection_text:
+            campo.delete_selection()
 
     # ── Dictado por voz ──────────────────────────────────────────────
 

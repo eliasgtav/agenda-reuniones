@@ -18,6 +18,7 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.widgets import CampoOrtografico, CampoOraciones
+from utils.voz import DictadoVoz
 
 Builder.load_string('''
 <DetalleReunionScreen>:
@@ -113,16 +114,42 @@ Builder.load_string('''
                     id: nuevo_participante
                     hint_text: "Agregar participante"
                     mode: "rectangle"
-                    size_hint_x: .8
+                    size_hint_x: 1
                     on_text: self.text = self.text.upper()
 
-                MDIconButton:
-                    icon: "account-plus"
-                    on_release: root.agregar_participante()
+                MDBoxLayout:
+                    adaptive_size: True
+                    spacing: '0dp'
 
-                MDIconButton:
-                    icon: "contacts"
-                    on_release: root.elegir_contacto()
+                    MDIconButton:
+                        id: participante_mic
+                        icon: "microphone"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        theme_icon_color: "Custom"
+                        icon_color: 0.13, 0.40, 0.75, 1
+                        on_release: root.toggle_voz_participante()
+
+                    MDIconButton:
+                        icon: "account-plus"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_release: root.agregar_participante()
+
+                    MDIconButton:
+                        icon: "contacts"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_release: root.elegir_contacto()
+
+            MDLabel:
+                id: lbl_voz_participante
+                text: ""
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Custom"
+                text_color: 0.13, 0.55, 0.13, 1
 
             # ── Área de Trabajo ──────────────────────────────────────
             MDCard:
@@ -156,6 +183,12 @@ Builder.load_string('''
                         theme_icon_color: "Custom"
                         icon_color: 0.13, 0.40, 0.75, 1
                         on_release: root.toggle_voz()
+
+                    MDIconButton:
+                        icon: "eraser"
+                        size_hint_x: None
+                        width: '36dp'
+                        on_release: root.borrar_seleccion('trabajo_field')
 
                     MDIconButton:
                         icon: "delete-sweep"
@@ -205,6 +238,21 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_notas()
 
+                MDIconButton:
+                    id: notas_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz_notas()
+
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('notas_field')
+
             CampoOraciones:
                 id: notas_field
                 hint_text: "Escribe las notas con lápiz o teclado..."
@@ -213,6 +261,15 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '220dp'
                 font_size: '15sp'
+
+            MDLabel:
+                id: lbl_voz_notas
+                text: ""
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Custom"
+                text_color: 0.13, 0.55, 0.13, 1
 
             MDBoxLayout:
                 adaptive_height: True
@@ -229,6 +286,21 @@ Builder.load_string('''
                     width: '36dp'
                     on_release: root.enfocar_conclusion()
 
+                MDIconButton:
+                    id: conclusion_mic
+                    icon: "microphone"
+                    size_hint_x: None
+                    width: '36dp'
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.toggle_voz_conclusion()
+
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('conclusion_field')
+
             CampoOraciones:
                 id: conclusion_field
                 hint_text: "Escribe la conclusión con lápiz o teclado..."
@@ -237,6 +309,15 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '220dp'
                 font_size: '15sp'
+
+            MDLabel:
+                id: lbl_voz_conclusion
+                text: ""
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Custom"
+                text_color: 0.13, 0.55, 0.13, 1
 
             MDBoxLayout:
                 adaptive_height: True
@@ -377,6 +458,9 @@ class DetalleReunionScreen(MDScreen):
     _check_hora_event = None
     _scroll_retry_events = None
     _load_event = None
+    _dictado_participante = None
+    _dictado_notas = None
+    _dictado_conclusion = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -506,6 +590,41 @@ class DetalleReunionScreen(MDScreen):
         db.agregar_participante(self._reunion_id, nombre)
         self.ids.nuevo_participante.text = ''
         self._cargar_participantes(db)
+
+    def toggle_voz_participante(self):
+        if self._dictado_participante is None:
+            self._dictado_participante = DictadoVoz(
+                campo=self.ids.nuevo_participante,
+                boton_mic=self.ids.participante_mic,
+                lbl_estado=self.ids.lbl_voz_participante,
+                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
+            )
+        self._dictado_participante.toggle()
+
+    def toggle_voz_notas(self):
+        if self._dictado_notas is None:
+            self._dictado_notas = DictadoVoz(
+                campo=self.ids.notas_field,
+                boton_mic=self.ids.notas_mic,
+                lbl_estado=self.ids.lbl_voz_notas,
+                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
+            )
+        self._dictado_notas.toggle()
+
+    def toggle_voz_conclusion(self):
+        if self._dictado_conclusion is None:
+            self._dictado_conclusion = DictadoVoz(
+                campo=self.ids.conclusion_field,
+                boton_mic=self.ids.conclusion_mic,
+                lbl_estado=self.ids.lbl_voz_conclusion,
+                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
+            )
+        self._dictado_conclusion.toggle()
+
+    def borrar_seleccion(self, field_id):
+        campo = self.ids[field_id]
+        if campo.selection_text:
+            campo.delete_selection()
 
     def elegir_contacto(self):
         from utils.contactos import abrir_selector

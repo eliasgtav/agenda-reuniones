@@ -11,7 +11,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoOrtografico, CampoOraciones
 
 Builder.load_string('''
 <NuevaReunionScreen>:
@@ -53,6 +53,12 @@ Builder.load_string('''
                     theme_icon_color: "Custom"
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('asunto_field', 'asunto_mic')
+
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('asunto_field')
 
             MDBoxLayout:
                 adaptive_height: True
@@ -110,6 +116,12 @@ Builder.load_string('''
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('lugar_field', 'lugar_mic')
 
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('lugar_field')
+
             MDLabel:
                 text: "Participantes"
                 font_style: "Subtitle1"
@@ -128,30 +140,34 @@ Builder.load_string('''
                     on_text: self.text = self.text.upper()
 
                 MDBoxLayout:
-                    adaptive_height: True
-                    size_hint_x: None
-                    width: '100dp'
-                    spacing: '2dp'
+                    adaptive_size: True
+                    spacing: '0dp'
 
                     MDIconButton:
                         id: participante_mic
                         icon: "microphone"
-                        size_hint_x: None
-                        width: '32dp'
+                        size_hint: None, None
+                        size: '32dp', '32dp'
                         theme_icon_color: "Custom"
                         icon_color: 0.13, 0.40, 0.75, 1
                         on_release: root.toggle_voz('nuevo_participante', 'participante_mic')
 
                     MDIconButton:
+                        icon: "eraser"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_release: root.borrar_seleccion('nuevo_participante')
+
+                    MDIconButton:
                         icon: "account-plus"
-                        size_hint_x: None
-                        width: '32dp'
+                        size_hint: None, None
+                        size: '32dp', '32dp'
                         on_release: root.agregar_participante_ui()
 
                     MDIconButton:
                         icon: "contacts"
-                        size_hint_x: None
-                        width: '32dp'
+                        size_hint: None, None
+                        size: '32dp', '32dp'
                         on_release: root.elegir_contacto()
 
             MDBoxLayout:
@@ -225,7 +241,13 @@ Builder.load_string('''
                     icon_color: 0.13, 0.40, 0.75, 1
                     on_release: root.toggle_voz('notas_field', 'notas_mic')
 
-            CampoOrtografico:
+                MDIconButton:
+                    icon: "eraser"
+                    size_hint_x: None
+                    width: '36dp'
+                    on_release: root.borrar_seleccion('notas_field')
+
+            CampoOraciones:
                 id: notas_field
                 hint_text: "Escribe las notas con lápiz, teclado o voz..."
                 mode: "rectangle"
@@ -292,6 +314,11 @@ class NuevaReunionScreen(MDScreen):
 
     def enfocar(self, field_id):
         self.ids[field_id].focus = True
+
+    def borrar_seleccion(self, field_id):
+        campo = self.ids[field_id]
+        if campo.selection_text:
+            campo.delete_selection()
 
     def _reset_form(self):
         self._participantes = []

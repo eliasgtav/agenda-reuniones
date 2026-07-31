@@ -74,6 +74,10 @@ Builder.load_string('''
                 on_release: root.toggle_voz()
 
             MDIconButton:
+                icon: "eraser"
+                on_release: root.borrar_seleccion()
+
+            MDIconButton:
                 icon: "delete-sweep"
                 theme_icon_color: "Custom"
                 icon_color: 0.70, 0.10, 0.10, 1
@@ -191,6 +195,11 @@ class EnReunionScreen(MDScreen):
 
     def enfocar_campo(self):
         self.ids.entrada_field.focus = True
+
+    def borrar_seleccion(self):
+        campo = self.ids.entrada_field
+        if campo.selection_text:
+            campo.delete_selection()
 
     def limpiar_campo(self):
         self.ids.entrada_field.text = ''
