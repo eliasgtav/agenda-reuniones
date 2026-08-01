@@ -75,7 +75,7 @@ Builder.load_string('''
                 icon: "eraser"
                 size_hint_x: None
                 width: '36dp'
-                on_release: root.borrar_seleccion('nombres_field')
+                on_press: root.borrar_seleccion('nombres_field')
 
         MDBoxLayout:
             adaptive_height: True
@@ -107,7 +107,7 @@ Builder.load_string('''
                 icon: "eraser"
                 size_hint_x: None
                 width: '36dp'
-                on_release: root.borrar_seleccion('apellidos_field')
+                on_press: root.borrar_seleccion('apellidos_field')
 
         MDLabel:
             id: lbl_voz_estado

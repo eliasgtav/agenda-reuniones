@@ -17,6 +17,7 @@ class DictadoVoz:
         self.on_permiso_denegado = on_permiso_denegado
         self._escuchando = False
         self._color_normal = tuple(boton_mic.icon_color)
+        self._ocultar_evento = None
 
     def toggle(self):
         if self._escuchando:
@@ -111,14 +112,25 @@ class DictadoVoz:
             Clock.schedule_once(lambda dt: self._error(msg), 0)
 
     def _insertar(self, texto):
-        actual = self.campo.text
+        campo = self.campo
+        actual = campo.text
         sep = ' ' if actual and not actual.endswith('\n') else ''
-        self.campo.text = (actual + sep + texto).strip()
-        self._estado(f'✓ "{texto[:60]}..."' if len(texto) > 60 else f'✓ "{texto}"')
+        # Pasar por insert_text (no reasignar campo.text a mano) para que
+        # transformaciones como la mayuscula de CampoOraciones se apliquen
+        # tambien al texto dictado, igual que si se hubiera escrito con
+        # teclado.
+        campo.cursor = campo.get_cursor_from_index(len(actual))
+        # El separador se inserta aparte del texto dictado: si van juntos en
+        # un solo insert_text, CampoOraciones mayuscula substring[0] (el
+        # espacio del separador) en vez de la primera letra real dictada.
+        if sep:
+            campo.insert_text(sep)
+        campo.insert_text(texto)
+        self._estado_temporal(f'✓ "{texto[:60]}..."' if len(texto) > 60 else f'✓ "{texto}"')
         self._restaurar()
 
     def _error(self, msg):
-        self._estado(f'⚠ {msg}')
+        self._estado_temporal(f'⚠ {msg}')
         self._restaurar()
 
     def _restaurar(self):
@@ -126,5 +138,21 @@ class DictadoVoz:
         self._escuchando = False
 
     def _estado(self, texto):
+        if self._ocultar_evento is not None:
+            self._ocultar_evento.cancel()
+            self._ocultar_evento = None
         if self.lbl_estado:
             self.lbl_estado.text = texto
+
+    def _estado_temporal(self, texto, duracion=3.0):
+        """Como _estado, pero la limpia sola tras `duracion` segundos: para
+        mensajes finales (exito/error) que no deben quedar pegados en
+        pantalla despues de terminar el dictado."""
+        self._estado(texto)
+        if self.lbl_estado:
+            self._ocultar_evento = Clock.schedule_once(self._ocultar_estado, duracion)
+
+    def _ocultar_estado(self, _dt):
+        self._ocultar_evento = None
+        if self.lbl_estado:
+            self.lbl_estado.text = ''

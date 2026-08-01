@@ -58,7 +58,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('asunto_field')
+                    on_press: root.borrar_seleccion('asunto_field')
 
             MDBoxLayout:
                 adaptive_height: True
@@ -120,7 +120,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('lugar_field')
+                    on_press: root.borrar_seleccion('lugar_field')
 
             MDLabel:
                 text: "Participantes"
@@ -156,7 +156,7 @@ Builder.load_string('''
                         icon: "eraser"
                         size_hint: None, None
                         size: '32dp', '32dp'
-                        on_release: root.borrar_seleccion('nuevo_participante')
+                        on_press: root.borrar_seleccion('nuevo_participante')
 
                     MDIconButton:
                         icon: "account-plus"
@@ -245,7 +245,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('notas_field')
+                    on_press: root.borrar_seleccion('notas_field')
 
             CampoOraciones:
                 id: notas_field

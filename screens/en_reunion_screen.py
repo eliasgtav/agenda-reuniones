@@ -75,7 +75,7 @@ Builder.load_string('''
 
             MDIconButton:
                 icon: "eraser"
-                on_release: root.borrar_seleccion()
+                on_press: root.borrar_seleccion()
 
             MDIconButton:
                 icon: "delete-sweep"

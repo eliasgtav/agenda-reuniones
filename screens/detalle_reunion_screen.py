@@ -188,7 +188,7 @@ Builder.load_string('''
                         icon: "eraser"
                         size_hint_x: None
                         width: '36dp'
-                        on_release: root.borrar_seleccion('trabajo_field')
+                        on_press: root.borrar_seleccion('trabajo_field')
 
                     MDIconButton:
                         icon: "delete-sweep"
@@ -251,7 +251,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('notas_field')
+                    on_press: root.borrar_seleccion('notas_field')
 
             CampoOraciones:
                 id: notas_field
@@ -299,7 +299,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('conclusion_field')
+                    on_press: root.borrar_seleccion('conclusion_field')
 
             CampoOraciones:
                 id: conclusion_field

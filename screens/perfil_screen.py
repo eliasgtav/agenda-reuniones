@@ -81,12 +81,6 @@ Builder.load_string('''
                     on_text: self.text = self.text.upper()
 
                 MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('nombres_field')
-
-                MDIconButton:
                     id: nombres_mic
                     icon: "microphone"
                     size_hint_x: None
@@ -99,7 +93,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('nombres_field')
+                    on_press: root.borrar_seleccion('nombres_field')
 
             MDBoxLayout:
                 adaptive_height: True
@@ -110,12 +104,6 @@ Builder.load_string('''
                     hint_text: "Apellidos *"
                     mode: "rectangle"
                     on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('apellidos_field')
 
                 MDIconButton:
                     id: apellidos_mic
@@ -130,7 +118,7 @@ Builder.load_string('''
                     icon: "eraser"
                     size_hint_x: None
                     width: '36dp'
-                    on_release: root.borrar_seleccion('apellidos_field')
+                    on_press: root.borrar_seleccion('apellidos_field')
 
             MDLabel:
                 id: lbl_voz_estado
@@ -266,9 +254,6 @@ class PerfilScreen(MDScreen):
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
         self.ids.smtp_server_field.text     = config.get('smtp_server', 'smtp.gmail.com')
         self._forzar_scroll_arriba()
-
-    def enfocar(self, field_id):
-        self.ids[field_id].focus = True
 
     def borrar_seleccion(self, field_id):
         campo = self.ids[field_id]
