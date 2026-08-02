@@ -50,6 +50,7 @@ class Database:
                     lugar         TEXT    DEFAULT '',
                     estado        TEXT    DEFAULT 'pendiente',
                     modalidad     TEXT    DEFAULT 'presencial',
+                    desarrollo    TEXT    DEFAULT '',
                     notas         TEXT    DEFAULT '',
                     conclusion    TEXT    DEFAULT '',
                     grabacion_path TEXT   DEFAULT '',
@@ -93,14 +94,18 @@ class Database:
                     FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE
                 );
             ''')
-            # Instalaciones existentes ya tenian la tabla 'reuniones' sin la
-            # columna 'modalidad' (agregada despues); CREATE TABLE IF NOT
-            # EXISTS no la agrega sola, hace falta ALTER TABLE. Ignorar el
-            # error si la columna ya existe (instalacion nueva o ya migrada).
-            try:
-                conn.execute("ALTER TABLE reuniones ADD COLUMN modalidad TEXT DEFAULT 'presencial'")
-            except sqlite3.OperationalError:
-                pass
+            # Instalaciones existentes ya tenian la tabla 'reuniones' sin
+            # columnas agregadas despues; CREATE TABLE IF NOT EXISTS no las
+            # agrega sola, hace falta ALTER TABLE. Ignorar el error si la
+            # columna ya existe (instalacion nueva o ya migrada).
+            for ddl in (
+                "ALTER TABLE reuniones ADD COLUMN modalidad TEXT DEFAULT 'presencial'",
+                "ALTER TABLE reuniones ADD COLUMN desarrollo TEXT DEFAULT ''",
+            ):
+                try:
+                    conn.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass
 
     # ── Reuniones ──────────────────────────────────────────────────────────────
 

@@ -217,10 +217,10 @@ Builder.load_string('''
                     text_color: 0.13, 0.55, 0.13, 1
 
                 MDRaisedButton:
-                    text: "GUARDAR EN NOTAS"
+                    text: "GUARDAR"
                     pos_hint: {"center_x": .5}
                     md_bg_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.guardar_trabajo_en_notas()
+                    on_release: root.guardar_trabajo()
 
             # ── Notas ────────────────────────────────────────────────
             MDBoxLayout:
@@ -270,6 +270,12 @@ Builder.load_string('''
                 adaptive_height: True
                 theme_text_color: "Custom"
                 text_color: 0.13, 0.55, 0.13, 1
+
+            MDRaisedButton:
+                text: "GUARDAR"
+                pos_hint: {"center_x": .5}
+                md_bg_color: 0.13, 0.40, 0.75, 1
+                on_release: root.guardar_notas()
 
             MDBoxLayout:
                 adaptive_height: True
@@ -550,6 +556,7 @@ class DetalleReunionScreen(MDScreen):
         self.ids.lbl_asunto.text = r['asunto']
         self.ids.lbl_info.text = f"{r['fecha']}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
         self.ids.lbl_estado.text = f"Estado: {r['estado'].upper()}"
+        self.ids.trabajo_field.text = r['desarrollo'] or ''
         self.ids.notas_field.text = r['notas'] or ''
         self.ids.conclusion_field.text = r['conclusion'] or ''
 
@@ -835,6 +842,7 @@ class DetalleReunionScreen(MDScreen):
         db = App.get_running_app().db
         db.actualizar_reunion(
             self._reunion_id,
+            desarrollo=self.ids.trabajo_field.text,
             notas=self.ids.notas_field.text,
             conclusion=self.ids.conclusion_field.text,
         )
@@ -846,6 +854,7 @@ class DetalleReunionScreen(MDScreen):
         db.actualizar_reunion(
             self._reunion_id,
             estado='realizada',
+            desarrollo=self.ids.trabajo_field.text,
             conclusion=self.ids.conclusion_field.text,
             notas=self.ids.notas_field.text,
         )
@@ -885,16 +894,10 @@ class DetalleReunionScreen(MDScreen):
         self.ids.trabajo_field.text = ''
         self.ids.lbl_voz_estado.text = ''
 
-    def guardar_trabajo_en_notas(self):
-        contenido = self.ids.trabajo_field.text.strip()
-        if not contenido:
-            self._mostrar_info('Aviso', 'El área de trabajo está vacía.')
-            return
-        actual = self.ids.notas_field.text
-        separador = '\n\n--- ' + datetime.now().strftime('%H:%M') + ' ---\n'
-        self.ids.notas_field.text = (actual + separador + contenido).strip()
-        self.ids.trabajo_field.text = ''
-        self.ids.lbl_voz_estado.text = '✓ Contenido guardado en Notas'
+    def guardar_trabajo(self):
+        db = App.get_running_app().db
+        db.actualizar_reunion(self._reunion_id, desarrollo=self.ids.trabajo_field.text)
+        self._mostrar_info('Guardado', 'Desarrollo de la reunión guardado correctamente.')
 
     def toggle_voz_trabajo(self):
         if self._dictado_trabajo is None:
@@ -910,6 +913,11 @@ class DetalleReunionScreen(MDScreen):
 
     def enfocar_notas(self):
         self.ids.notas_field.focus = True
+
+    def guardar_notas(self):
+        db = App.get_running_app().db
+        db.actualizar_reunion(self._reunion_id, notas=self.ids.notas_field.text)
+        self._mostrar_info('Guardado', 'Objetivos de la reunión guardados correctamente.')
 
     def enfocar_conclusion(self):
         self.ids.conclusion_field.focus = True
