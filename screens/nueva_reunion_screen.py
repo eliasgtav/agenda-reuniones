@@ -11,7 +11,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
-from utils.widgets import CampoOrtografico, CampoOraciones
+from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <NuevaReunionScreen>:
@@ -123,6 +123,27 @@ Builder.load_string('''
                     on_press: root.borrar_seleccion('lugar_field')
 
             MDLabel:
+                text: "Modalidad"
+                font_style: "Subtitle1"
+                adaptive_height: True
+
+            MDBoxLayout:
+                adaptive_height: True
+                spacing: '8dp'
+
+                MDRaisedButton:
+                    id: btn_presencial
+                    text: "PRESENCIAL"
+                    size_hint_x: 1
+                    on_release: root.elegir_modalidad('presencial')
+
+                MDRaisedButton:
+                    id: btn_virtual
+                    text: "VIRTUAL"
+                    size_hint_x: 1
+                    on_release: root.elegir_modalidad('virtual')
+
+            MDLabel:
                 text: "Participantes"
                 font_style: "Subtitle1"
                 adaptive_height: True
@@ -217,45 +238,6 @@ Builder.load_string('''
                     adaptive_height: True
                     valign: "center"
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
-
-                MDLabel:
-                    text: "Notas adicionales"
-                    font_style: "Subtitle1"
-                    adaptive_height: True
-
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('notas_field')
-
-                MDIconButton:
-                    id: notas_mic
-                    icon: "microphone"
-                    size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('notas_field', 'notas_mic')
-
-                MDIconButton:
-                    icon: "eraser"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_press: root.borrar_seleccion('notas_field')
-
-            CampoOraciones:
-                id: notas_field
-                hint_text: "Escribe las notas con lápiz, teclado o voz..."
-                mode: "rectangle"
-                multiline: True
-                size_hint_y: None
-                height: '180dp'
-                font_size: '15sp'
-
             MDLabel:
                 id: lbl_voz_estado
                 text: ""
@@ -327,10 +309,10 @@ class NuevaReunionScreen(MDScreen):
         self.ids.fecha_field.text = ''
         self.ids.hora_field.text = ''
         self.ids.lugar_field.text = ''
-        self.ids.notas_field.text = ''
         self.ids.nuevo_participante.text = ''
         self.ids.lbl_voz_estado.text = ''
         self.ids.participantes_list.clear_widgets()
+        self.elegir_modalidad('presencial')
         self._forzar_scroll_arriba()
 
     def _forzar_scroll_arriba(self):
@@ -362,6 +344,17 @@ class NuevaReunionScreen(MDScreen):
             )
         self._dictados[campo_id].toggle()
 
+    # ── Modalidad ────────────────────────────────────────────────────
+
+    _modalidad = 'presencial'
+
+    def elegir_modalidad(self, valor):
+        self._modalidad = valor
+        seleccionado = (0.13, 0.40, 0.75, 1)
+        no_seleccionado = (0.75, 0.75, 0.75, 1)
+        self.ids.btn_presencial.md_bg_color = seleccionado if valor == 'presencial' else no_seleccionado
+        self.ids.btn_virtual.md_bg_color = seleccionado if valor == 'virtual' else no_seleccionado
+
     def cargar_para_editar(self, reunion_id):
         app = App.get_running_app()
         r = app.db.obtener_reunion(reunion_id)
@@ -372,7 +365,7 @@ class NuevaReunionScreen(MDScreen):
         self.ids.fecha_field.text = r['fecha']
         self.ids.hora_field.text = r['hora']
         self.ids.lugar_field.text = r['lugar'] or ''
-        self.ids.notas_field.text = r['notas'] or ''
+        self.elegir_modalidad(r['modalidad'] or 'presencial')
         self._participantes = [p['nombre'] for p in app.db.listar_participantes(reunion_id)]
         self._refrescar_participantes()
 
@@ -435,7 +428,6 @@ class NuevaReunionScreen(MDScreen):
 
         hora = self.ids.hora_field.text.strip() or '09:00'
         lugar = self.ids.lugar_field.text.strip()
-        notas = self.ids.notas_field.text.strip()
 
         alertas = []
         if self.ids.sw_30min.active:
@@ -451,14 +443,14 @@ class NuevaReunionScreen(MDScreen):
         if self._editar_id:
             db.actualizar_reunion(
                 self._editar_id,
-                asunto=asunto, fecha=fecha, hora=hora, lugar=lugar, notas=notas
+                asunto=asunto, fecha=fecha, hora=hora, lugar=lugar, modalidad=self._modalidad,
             )
             for p in db.listar_participantes(self._editar_id):
                 db.eliminar_participante(p['id'])
             for nombre in self._participantes:
                 db.agregar_participante(self._editar_id, nombre)
         else:
-            rid = db.crear_reunion(asunto, fecha, hora, lugar, notas, alertas)
+            rid = db.crear_reunion(asunto, fecha, hora, lugar, tipos_alerta=alertas, modalidad=self._modalidad)
             for nombre in self._participantes:
                 db.agregar_participante(rid, nombre)
 

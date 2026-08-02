@@ -49,6 +49,7 @@ class Database:
                     hora          TEXT    NOT NULL DEFAULT '09:00',
                     lugar         TEXT    DEFAULT '',
                     estado        TEXT    DEFAULT 'pendiente',
+                    modalidad     TEXT    DEFAULT 'presencial',
                     notas         TEXT    DEFAULT '',
                     conclusion    TEXT    DEFAULT '',
                     grabacion_path TEXT   DEFAULT '',
@@ -92,14 +93,22 @@ class Database:
                     FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE
                 );
             ''')
+            # Instalaciones existentes ya tenian la tabla 'reuniones' sin la
+            # columna 'modalidad' (agregada despues); CREATE TABLE IF NOT
+            # EXISTS no la agrega sola, hace falta ALTER TABLE. Ignorar el
+            # error si la columna ya existe (instalacion nueva o ya migrada).
+            try:
+                conn.execute("ALTER TABLE reuniones ADD COLUMN modalidad TEXT DEFAULT 'presencial'")
+            except sqlite3.OperationalError:
+                pass
 
     # ── Reuniones ──────────────────────────────────────────────────────────────
 
-    def crear_reunion(self, asunto, fecha, hora, lugar='', notas='', tipos_alerta=None):
+    def crear_reunion(self, asunto, fecha, hora, lugar='', notas='', tipos_alerta=None, modalidad='presencial'):
         with self._conn() as conn:
             cur = conn.execute(
-                'INSERT INTO reuniones (asunto, fecha, hora, lugar, notas) VALUES (?,?,?,?,?)',
-                (asunto, fecha, hora, lugar, notas),
+                'INSERT INTO reuniones (asunto, fecha, hora, lugar, notas, modalidad) VALUES (?,?,?,?,?,?)',
+                (asunto, fecha, hora, lugar, notas, modalidad),
             )
             rid = cur.lastrowid
             if tipos_alerta:
