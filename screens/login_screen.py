@@ -57,12 +57,6 @@ Builder.load_string('''
                 on_text: self.text = self.text.upper()
 
             MDIconButton:
-                icon: "pencil"
-                size_hint_x: None
-                width: '36dp'
-                on_release: root.enfocar('nombres_field')
-
-            MDIconButton:
                 id: nombres_mic
                 icon: "microphone"
                 size_hint_x: None
@@ -87,12 +81,6 @@ Builder.load_string('''
                 mode: "rectangle"
                 font_size: '15sp'
                 on_text: self.text = self.text.upper()
-
-            MDIconButton:
-                icon: "pencil"
-                size_hint_x: None
-                width: '36dp'
-                on_release: root.enfocar('apellidos_field')
 
             MDIconButton:
                 id: apellidos_mic
@@ -145,9 +133,6 @@ Builder.load_string('''
 
 class LoginScreen(MDScreen):
     _dictados = None
-
-    def enfocar(self, field_id):
-        self.ids[field_id].focus = True
 
     def borrar_seleccion(self, field_id):
         campo = self.ids[field_id]

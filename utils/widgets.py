@@ -5,6 +5,8 @@ reconoce, aparece una barra flotante con hasta 3 sugerencias tocables
 debajo del campo enfocado (sin cambiar la apariencia del campo). El
 usuario elige tocando una sugerencia; si no toca ninguna, el texto se
 queda como está."""
+from time import time
+
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp
@@ -157,7 +159,34 @@ class CampoOrtografico(MDTextField):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._revision_evento = None
+        self._ultimo_toque_ts = 0
+        self._ultimo_toque_pos = None
         self.bind(text=self._on_text_cambio, focus=self._on_focus_cambio)
+
+    def on_touch_down(self, touch):
+        consumido = super().on_touch_down(touch)
+        if self.collide_point(*touch.pos):
+            # Deteccion propia de doble toque (no touch.is_double_tap): en
+            # pantalla tactil real el segundo dedo casi nunca cae en el
+            # mismo pixel que el primero, y el umbral de distancia por
+            # defecto de Kivy (pensado para mouse) es demasiado estricto,
+            # asi que el doble-tap para seleccionar palabra fallaba en el
+            # telefono aunque funcionara con mouse en escritorio.
+            ahora = time()
+            anterior_ts = self._ultimo_toque_ts
+            anterior_pos = self._ultimo_toque_pos
+            self._ultimo_toque_ts = ahora
+            self._ultimo_toque_pos = touch.pos
+            if (
+                anterior_pos is not None
+                and ahora - anterior_ts < 0.4
+                and abs(touch.x - anterior_pos[0]) < dp(40)
+                and abs(touch.y - anterior_pos[1]) < dp(40)
+            ):
+                self._ultimo_toque_ts = 0
+                self._ultimo_toque_pos = None
+                self._select_word()
+        return consumido
 
     def _on_text_cambio(self, *_args):
         if self._revision_evento is not None:

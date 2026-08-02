@@ -182,7 +182,7 @@ Builder.load_string('''
                         width: '36dp'
                         theme_icon_color: "Custom"
                         icon_color: 0.13, 0.40, 0.75, 1
-                        on_release: root.toggle_voz()
+                        on_release: root.toggle_voz_trabajo()
 
                     MDIconButton:
                         icon: "eraser"
@@ -459,6 +459,7 @@ class DetalleReunionScreen(MDScreen):
     _scroll_retry_events = None
     _load_event = None
     _dictado_participante = None
+    _dictado_trabajo = None
     _dictado_notas = None
     _dictado_conclusion = None
 
@@ -895,92 +896,15 @@ class DetalleReunionScreen(MDScreen):
         self.ids.trabajo_field.text = ''
         self.ids.lbl_voz_estado.text = '✓ Contenido guardado en Notas'
 
-    _escuchando = False
-
-    def toggle_voz(self):
-        if self._escuchando:
-            return
-        self._con_permiso_audio(self._iniciar_escucha)
-
-    def _iniciar_escucha(self):
-        self._escuchando = True
-        self.ids.btn_mic.icon_color = (0.8, 0.1, 0.1, 1)
-        self.ids.lbl_voz_estado.text = '🎤 Escuchando... habla ahora'
-        if platform == 'android':
-            # speech_recognition + PyAudio son librerias de escritorio: no
-            # estan (ni conviene meterlas, PyAudio/portaudio no compila bien
-            # para Android) en buildozer.spec. En el telefono se usa la API
-            # nativa de reconocimiento de voz de Android via plyer.stt.
-            self._escuchar_voz_android()
-        else:
-            import threading
-            threading.Thread(target=self._escuchar_voz, daemon=True).start()
-
-    def _escuchar_voz_android(self):
-        try:
-            from plyer import stt
-            if not stt.exist():
-                self._voz_error('Este dispositivo no tiene reconocimiento de voz disponible.')
-                return
-            stt._language = 'es-ES'  # el setter publico de plyer solo acepta en-US/pl-PL
-            stt.prefer_offline = False
-            stt.start()
-            Clock.schedule_interval(self._revisar_stt_android, 0.3)
-        except Exception as e:
-            self._voz_error(f'Error: {e}')
-
-    def _revisar_stt_android(self, dt):
-        from plyer import stt
-        if stt.listening:
-            return
-        Clock.unschedule(self._revisar_stt_android)
-        if stt.errors:
-            err = stt.errors[-1]
-            stt.errors = []
-            if 'no_match' in err or 'speech_timeout' in err:
-                self._voz_error('No se detectó voz. Intenta de nuevo.')
-            else:
-                self._voz_error(f'Error: {err}')
-            return
-        if stt.results:
-            texto = stt.results[0]
-            stt.results = []
-            self._insertar_texto_voz(texto)
-        else:
-            self._voz_error('No se detectó voz.')
-
-    def _escuchar_voz(self):
-        from kivy.clock import Clock
-        try:
-            import speech_recognition as sr
-            r = sr.Recognizer()
-            r.pause_threshold = 1.5
-            with sr.Microphone() as source:
-                r.adjust_for_ambient_noise(source, duration=0.5)
-                audio = r.listen(source, timeout=10, phrase_time_limit=60)
-            texto = r.recognize_google(audio, language='es-ES')
-            Clock.schedule_once(lambda dt: self._insertar_texto_voz(texto), 0)
-        except sr.WaitTimeoutError:
-            Clock.schedule_once(lambda dt: self._voz_error('Tiempo agotado. No se detectó voz.'), 0)
-        except sr.UnknownValueError:
-            Clock.schedule_once(lambda dt: self._voz_error('No se entendió lo que dijiste. Intenta de nuevo.'), 0)
-        except sr.RequestError:
-            Clock.schedule_once(lambda dt: self._voz_error('Sin conexión a internet para reconocimiento de voz.'), 0)
-        except Exception as e:
-            Clock.schedule_once(lambda dt: self._voz_error(f'Error: {e}'), 0)
-
-    def _insertar_texto_voz(self, texto):
-        campo = self.ids.trabajo_field
-        actual = campo.text
-        campo.text = (actual + (' ' if actual and not actual.endswith('\n') else '') + texto).strip()
-        self.ids.lbl_voz_estado.text = f'✓ Voz reconocida: "{texto[:50]}..."' if len(texto) > 50 else f'✓ Voz: "{texto}"'
-        self.ids.btn_mic.icon_color = (0.13, 0.40, 0.75, 1)
-        self._escuchando = False
-
-    def _voz_error(self, msg):
-        self.ids.lbl_voz_estado.text = f'⚠ {msg}'
-        self.ids.btn_mic.icon_color = (0.13, 0.40, 0.75, 1)
-        self._escuchando = False
+    def toggle_voz_trabajo(self):
+        if self._dictado_trabajo is None:
+            self._dictado_trabajo = DictadoVoz(
+                campo=self.ids.trabajo_field,
+                boton_mic=self.ids.btn_mic,
+                lbl_estado=self.ids.lbl_voz_estado,
+                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
+            )
+        self._dictado_trabajo.toggle()
 
     # ── Notas ─────────────────────────────────────────────────────────
 
