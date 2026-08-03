@@ -6,6 +6,7 @@ from kivy.utils import platform
 _DEFAULTS = {
     'nombre': 'Usuario',
     'foto_perfil': '',
+    'sms_auto_respuesta': 'Estoy en una reunión, te devuelvo la llamada en cuanto termine.',
 }
 
 

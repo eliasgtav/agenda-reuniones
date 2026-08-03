@@ -89,6 +89,10 @@ class Database:
                     reunion_id  INTEGER NOT NULL,
                     texto       TEXT    NOT NULL,
                     plazo       TEXT    DEFAULT '',
+                    plazo_hora  TEXT    DEFAULT '',
+                    responsable TEXT    DEFAULT '',
+                    estado      TEXT    DEFAULT 'pendiente',
+                    prioridad   TEXT    DEFAULT 'media',
                     alerta_enviada INTEGER DEFAULT 0,
                     created_at  TEXT    DEFAULT (datetime('now','localtime')),
                     FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE
@@ -101,6 +105,10 @@ class Database:
             for ddl in (
                 "ALTER TABLE reuniones ADD COLUMN modalidad TEXT DEFAULT 'presencial'",
                 "ALTER TABLE reuniones ADD COLUMN desarrollo TEXT DEFAULT ''",
+                "ALTER TABLE acuerdos ADD COLUMN responsable TEXT DEFAULT ''",
+                "ALTER TABLE acuerdos ADD COLUMN estado TEXT DEFAULT 'pendiente'",
+                "ALTER TABLE acuerdos ADD COLUMN prioridad TEXT DEFAULT 'media'",
+                "ALTER TABLE acuerdos ADD COLUMN plazo_hora TEXT DEFAULT ''",
             ):
                 try:
                     conn.execute(ddl)
@@ -139,7 +147,10 @@ class Database:
         query = 'SELECT * FROM reuniones'
         params = []
         conds = []
-        if estado and estado != 'todas':
+        if estado == 'hoy':
+            conds.append('fecha=?')
+            params.append(datetime.now().strftime('%Y-%m-%d'))
+        elif estado and estado != 'todas':
             conds.append('estado=?')
             params.append(estado)
         if busqueda:
@@ -262,18 +273,25 @@ class Database:
 
     # ── Acuerdos ───────────────────────────────────────────────────────────────
 
-    def guardar_acuerdo(self, reunion_id, texto, plazo=''):
+    def guardar_acuerdo(self, reunion_id, texto, plazo='', responsable='', prioridad='media', plazo_hora=''):
         with self._conn() as conn:
             cur = conn.execute(
-                'INSERT INTO acuerdos (reunion_id, texto, plazo) VALUES (?,?,?)',
-                (reunion_id, texto, plazo),
+                'INSERT INTO acuerdos (reunion_id, texto, plazo, responsable, prioridad, plazo_hora) VALUES (?,?,?,?,?,?)',
+                (reunion_id, texto, plazo, responsable, prioridad, plazo_hora),
             )
             return cur.lastrowid
+
+    def actualizar_acuerdo(self, acuerdo_id, texto, plazo='', responsable='', prioridad='media', plazo_hora=''):
+        with self._conn() as conn:
+            conn.execute(
+                'UPDATE acuerdos SET texto=?, plazo=?, responsable=?, prioridad=?, plazo_hora=? WHERE id=?',
+                (texto, plazo, responsable, prioridad, plazo_hora, acuerdo_id),
+            )
 
     def listar_acuerdos(self, reunion_id):
         with self._conn() as conn:
             rows = conn.execute(
-                'SELECT * FROM acuerdos WHERE reunion_id=? ORDER BY created_at',
+                'SELECT * FROM acuerdos WHERE reunion_id=? ORDER BY created_at, id',
                 (reunion_id,),
             ).fetchall()
             return [dict(r) for r in rows]
@@ -282,16 +300,53 @@ class Database:
         with self._conn() as conn:
             conn.execute('DELETE FROM acuerdos WHERE id=?', (acuerdo_id,))
 
+    def marcar_estado_acuerdo(self, acuerdo_id, estado):
+        with self._conn() as conn:
+            conn.execute('UPDATE acuerdos SET estado=? WHERE id=?', (estado, acuerdo_id))
+
+    def listar_todos_acuerdos(self, estado=None, busqueda=None):
+        hoy = datetime.now().strftime('%Y-%m-%d')
+        query = '''
+            SELECT a.*, r.asunto as reunion_asunto, r.fecha as reunion_fecha
+            FROM acuerdos a
+            JOIN reuniones r ON r.id = a.reunion_id
+        '''
+        conds = []
+        params = []
+        if estado and estado != 'todos':
+            if estado == 'vencido':
+                conds.append("a.estado != 'completado' AND a.plazo != '' AND a.plazo < ?")
+                params.append(hoy)
+            else:
+                conds.append('a.estado = ?')
+                params.append(estado)
+        if busqueda:
+            conds.append('(a.texto LIKE ? OR a.responsable LIKE ? OR r.asunto LIKE ?)')
+            params += [f'%{busqueda}%'] * 3
+        if conds:
+            query += ' WHERE ' + ' AND '.join(conds)
+        query += " ORDER BY (a.plazo = '' OR a.plazo IS NULL), a.plazo ASC"
+        with self._conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def contar_acuerdos_activos(self):
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as c FROM acuerdos WHERE estado != 'completado'"
+            ).fetchone()
+            return row['c'] if row else 0
+
     def acuerdos_con_plazo_pendientes(self):
         hoy = datetime.now().strftime('%Y-%m-%d')
         manana = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
         with self._conn() as conn:
             rows = conn.execute('''
-                SELECT a.id, a.texto, a.plazo, a.alerta_enviada,
+                SELECT a.id, a.texto, a.plazo, a.alerta_enviada, a.responsable,
                        r.asunto as reunion_asunto
                 FROM acuerdos a
                 JOIN reuniones r ON r.id = a.reunion_id
-                WHERE a.plazo != '' AND a.alerta_enviada = 0
+                WHERE a.plazo != '' AND a.alerta_enviada = 0 AND a.estado != 'completado'
                   AND a.plazo <= ?
             ''', (manana,)).fetchall()
             return [dict(r) for r in rows]

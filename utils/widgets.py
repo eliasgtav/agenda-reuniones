@@ -5,6 +5,7 @@ reconoce, aparece una barra flotante con hasta 3 sugerencias tocables
 debajo del campo enfocado (sin cambiar la apariencia del campo). El
 usuario elige tocando una sugerencia; si no toca ninguna, el texto se
 queda como está."""
+import re
 from time import time
 
 from kivy.clock import Clock
@@ -251,3 +252,127 @@ class CampoOraciones(CampoOrtografico):
     def _inicia_oracion(self):
         antes = self.text[:self.cursor_index()].rstrip(' \t')
         return not antes or antes[-1] in '.!?\n'
+
+
+def _mayuscula_inicial(texto):
+    return texto[0].upper() + texto[1:] if texto else texto
+
+
+class CampoAcuerdosNumerados(CampoOraciones):
+    """Cada línea se numera sola (1.- , 2.- , ...) a medida que se escribe,
+    para llevar los acuerdos de la reunión como una lista numerada dentro
+    del mismo campo, sin diálogo ni pantalla aparte. Enter en una línea
+    numerada vacía (el usuario no escribió nada) apaga la numeración de
+    forma permanente para el resto del texto -- pensado para cuando ya
+    terminó de listar acuerdos y quiere seguir escribiendo notas libres."""
+
+    def __init__(self, **kwargs):
+        self._numerando = True
+        super().__init__(**kwargs)
+        self.bind(focus=self._on_focus_numerado, text=self._on_text_numerado)
+
+    def reiniciar_numeracion(self):
+        """Llamar al cargar una reunión distinta en este mismo campo (el
+        widget se reutiliza entre reuniones): sin esto, apagar la
+        numeración en una reunión la dejaría apagada también en las
+        siguientes que se abran con este mismo campo."""
+        self._numerando = True
+
+    def _on_text_numerado(self, _inst, texto):
+        # Si el usuario borra todo el texto visible, cuenta como "empezar
+        # de nuevo": reactiva la numeración aunque un doble Enter anterior
+        # la hubiera apagado. Puede quedar una o más líneas en blanco sin
+        # texto real (p.ej. al borrar con retroceso no siempre se llega
+        # hasta un self.text == '' exacto) -- eso también hacía que
+        # insert_text nunca viera "self.text vacío" y no renumerara. Se
+        # limpian esas líneas en blanco solas, en el siguiente frame (no
+        # de inmediato: seguir editando self.text en medio del borrado que
+        # disparó este evento reentra en el propio TextInput y puede
+        # desincronizar el cursor).
+        if not texto.strip():
+            self._numerando = True
+            if texto:
+                Clock.schedule_once(self._limpiar_lineas_vacias, 0)
+
+    def _limpiar_lineas_vacias(self, _dt):
+        if self.text and not self.text.strip():
+            self.select_text(0, len(self.text))
+            self.delete_selection()
+
+    def _on_focus_numerado(self, _inst, tiene_foco):
+        # Sembrar el "1.- " al enfocar un campo vacío, ANTES de que llegue
+        # cualquier texto real (así no depende de si el primer texto llega
+        # caracter por caracter, en un solo bloque por voz, o pegado). Se
+        # llama directo al insert_text de TextInput (sin pasar por el de
+        # esta clase ni el de CampoOraciones) para no reentrar en la propia
+        # lógica de numerado de abajo y duplicar el número ("1.- 1.- ...").
+        if tiene_foco and self._numerando and not self.text:
+            from kivy.uix.textinput import TextInput
+            TextInput.insert_text(self, '1.- ')
+
+    def insert_text(self, substring, from_undo=False):
+        if not self._numerando or from_undo:
+            return super().insert_text(substring, from_undo=from_undo)
+
+        if substring == '\n':
+            linea_actual = self._linea_actual()
+            if re.fullmatch(r'\d+\.- ', linea_actual):
+                # Línea numerada vacía: se quita ese número y se apaga la
+                # numeración en vez de abrir otra línea numerada más.
+                fin = self.cursor_index()
+                inicio = fin - len(linea_actual)
+                self.select_text(inicio, fin)
+                self.delete_selection()
+                self._numerando = False
+                return super().insert_text('\n', from_undo=from_undo)
+
+        if substring:
+            partes = substring.split('\n')
+            numero = self._siguiente_numero()
+            # La línea donde está el cursor está vacía en este momento --
+            # ya sea porque el campo entero está vacío (recién enfocado
+            # sin haber alcanzado a sembrar el "1.- " a tiempo, o borrado
+            # todo sin volver a salir del campo), o porque el usuario
+            # borró un acuerdo puntual (número incluido) para corregirlo y
+            # sigue escribiendo en esa misma línea: en ambos casos, numerar
+            # la línea que está por empezar. La mayúscula inicial se aplica
+            # aquí mismo (no dejarla para el _inicia_oracion de
+            # CampoOraciones): ese sólo mira substring[0], que en este
+            # punto ya es el número antepuesto, no la letra real.
+            if not self._linea_actual() and partes[0].strip():
+                partes[0] = f'{numero}.- {_mayuscula_inicial(partes[0])}'
+                numero += 1
+            # Cualquier salto de línea dentro de lo insertado (Enter, o
+            # texto con varias líneas pegado/dictado de una sola vez)
+            # numera la línea siguiente (misma razón: mayúscula aplicada
+            # aquí mismo).
+            for i in range(1, len(partes)):
+                partes[i] = f'{numero}.- {_mayuscula_inicial(partes[i])}'
+                numero += 1
+            substring = '\n'.join(partes)
+        return super().insert_text(substring, from_undo=from_undo)
+
+    def _inicia_oracion(self):
+        # Además de inicio de texto / tras '.', '!', '?' o salto de línea
+        # (comportamiento heredado): también justo después del "N.- " que
+        # se antepone solo, para que la primera letra de cada acuerdo
+        # también salga en mayúscula.
+        if super()._inicia_oracion():
+            return True
+        if not self._numerando:
+            return False
+        antes = self.text[:self.cursor_index()]
+        return bool(re.search(r'\d+\.- $', antes))
+
+    def _linea_actual(self):
+        antes = self.text[:self.cursor_index()]
+        inicio = antes.rfind('\n') + 1
+        return antes[inicio:]
+
+    def _siguiente_numero(self):
+        numeros = []
+        for linea in self.text.split('\n'):
+            m = re.match(r'^(\d+)\.- ', linea)
+            if m:
+                numeros.append(int(m.group(1)))
+        return (max(numeros) + 1) if numeros else 1

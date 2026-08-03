@@ -1,5 +1,6 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import os
+import re
 import shutil
 import threading
 from datetime import datetime
@@ -17,8 +18,10 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
-from utils.widgets import CampoOrtografico, CampoOraciones
+from utils.widgets import CampoOrtografico, CampoOraciones, CampoAcuerdosNumerados
 from utils.voz import DictadoVoz
+from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
+from utils.fechas import fecha_larga
 
 Builder.load_string('''
 <DetalleReunionScreen>:
@@ -216,12 +219,6 @@ Builder.load_string('''
                     theme_text_color: "Custom"
                     text_color: 0.13, 0.55, 0.13, 1
 
-                MDRaisedButton:
-                    text: "GUARDAR"
-                    pos_hint: {"center_x": .5}
-                    md_bg_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.guardar_trabajo()
-
             # ── Notas ────────────────────────────────────────────────
             MDBoxLayout:
                 adaptive_height: True
@@ -271,18 +268,12 @@ Builder.load_string('''
                 theme_text_color: "Custom"
                 text_color: 0.13, 0.55, 0.13, 1
 
-            MDRaisedButton:
-                text: "GUARDAR"
-                pos_hint: {"center_x": .5}
-                md_bg_color: 0.13, 0.40, 0.75, 1
-                on_release: root.guardar_notas()
-
             MDBoxLayout:
                 adaptive_height: True
                 spacing: '8dp'
 
                 MDLabel:
-                    text: "CIERRE Y ACUERDOS DE LA REUNIÓN"
+                    text: "ACUERDOS Y COMPROMISOS"
                     font_style: "Subtitle1"
                     adaptive_height: True
 
@@ -307,9 +298,9 @@ Builder.load_string('''
                     width: '36dp'
                     on_press: root.borrar_seleccion('conclusion_field')
 
-            CampoOraciones:
+            CampoAcuerdosNumerados:
                 id: conclusion_field
-                hint_text: "Escribe la conclusión con lápiz o teclado..."
+                hint_text: "Escribe cada acuerdo y presiona Enter para el siguiente..."
                 mode: "rectangle"
                 multiline: True
                 size_hint_y: None
@@ -330,19 +321,29 @@ Builder.load_string('''
                 spacing: '8dp'
 
                 MDLabel:
-                    text: "Acuerdos con plazo de cumplimiento"
-                    font_style: "Subtitle2"
+                    text: "ACCIONES, NOMBRE DEL RESPONSABLE Y PLAZOS DE CUMPLIMIENTO"
+                    font_style: "Subtitle1"
                     adaptive_height: True
+                    text_size: self.width, None
                     theme_text_color: "Custom"
-                    text_color: 0.13, 0.40, 0.75, 1
+                    text_color: 0, 0, 0, 1
 
                 MDIconButton:
-                    icon: "bell-plus"
+                    icon: "clipboard-plus-outline"
                     theme_icon_color: "Custom"
                     icon_color: 0.13, 0.40, 0.75, 1
                     size_hint_x: None
                     width: '40dp'
                     on_release: root.agregar_acuerdo_plazo()
+
+                MDIconButton:
+                    id: btn_toggle_acuerdos
+                    icon: "chevron-down"
+                    theme_icon_color: "Custom"
+                    icon_color: 0.13, 0.40, 0.75, 1
+                    size_hint_x: None
+                    width: '40dp'
+                    on_release: root.toggle_lista_acuerdos()
 
             MDBoxLayout:
                 id: acuerdos_plazo_list
@@ -450,6 +451,13 @@ COLORES_ESTADO = {
     'no_asistida': (1.00, 0.88, 0.70, 1),
 }
 
+
+PRIORIDADES = [
+    ('baja',  'Baja',  (0.35, 0.55, 0.35, 1)),
+    ('media', 'Media', (0.75, 0.55, 0.10, 1)),
+    ('alta',  'Alta',  (0.80, 0.15, 0.15, 1)),
+]
+
 _grabando = False
 _grabacion_path = None
 _sonido_actual = None
@@ -468,6 +476,7 @@ class DetalleReunionScreen(MDScreen):
     _dictado_trabajo = None
     _dictado_notas = None
     _dictado_conclusion = None
+    _acuerdos_visibles = False
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -554,14 +563,16 @@ class DetalleReunionScreen(MDScreen):
         color = COLORES_ESTADO.get(r['estado'], (0.95, 0.95, 0.95, 1))
         self.ids.header_card.md_bg_color = color
         self.ids.lbl_asunto.text = r['asunto']
-        self.ids.lbl_info.text = f"{r['fecha']}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
+        self.ids.lbl_info.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
         self.ids.lbl_estado.text = f"Estado: {r['estado'].upper()}"
         self.ids.trabajo_field.text = r['desarrollo'] or ''
         self.ids.notas_field.text = r['notas'] or ''
         self.ids.conclusion_field.text = r['conclusion'] or ''
+        self.ids.conclusion_field.reiniciar_numeracion()
 
         self._cargar_participantes(db)
         self._cargar_archivos(db)
+        self.ids.btn_toggle_acuerdos.icon = 'chevron-up' if self._acuerdos_visibles else 'chevron-down'
         self._cargar_acuerdos_plazo()
 
     def _cargar_participantes(self, db):
@@ -620,6 +631,10 @@ class DetalleReunionScreen(MDScreen):
         self._dictado_notas.toggle()
 
     def toggle_voz_conclusion(self):
+        # Enfocar antes de dictar: si el campo está vacío, dispara el
+        # sembrado del "1.- " (CampoAcuerdosNumerados) igual que si el
+        # usuario hubiera tocado el campo para escribir a mano.
+        self.ids.conclusion_field.focus = True
         if self._dictado_conclusion is None:
             self._dictado_conclusion = DictadoVoz(
                 campo=self.ids.conclusion_field,
@@ -894,11 +909,6 @@ class DetalleReunionScreen(MDScreen):
         self.ids.trabajo_field.text = ''
         self.ids.lbl_voz_estado.text = ''
 
-    def guardar_trabajo(self):
-        db = App.get_running_app().db
-        db.actualizar_reunion(self._reunion_id, desarrollo=self.ids.trabajo_field.text)
-        self._mostrar_info('Guardado', 'Desarrollo de la reunión guardado correctamente.')
-
     def toggle_voz_trabajo(self):
         if self._dictado_trabajo is None:
             self._dictado_trabajo = DictadoVoz(
@@ -914,21 +924,23 @@ class DetalleReunionScreen(MDScreen):
     def enfocar_notas(self):
         self.ids.notas_field.focus = True
 
-    def guardar_notas(self):
-        db = App.get_running_app().db
-        db.actualizar_reunion(self._reunion_id, notas=self.ids.notas_field.text)
-        self._mostrar_info('Guardado', 'Objetivos de la reunión guardados correctamente.')
-
     def enfocar_conclusion(self):
         self.ids.conclusion_field.focus = True
 
     # ── Acuerdos con plazo ────────────────────────────────────────────
 
+    def toggle_lista_acuerdos(self):
+        self._acuerdos_visibles = not self._acuerdos_visibles
+        self.ids.btn_toggle_acuerdos.icon = 'chevron-up' if self._acuerdos_visibles else 'chevron-down'
+        self._cargar_acuerdos_plazo()
+
     def _cargar_acuerdos_plazo(self):
         app = App.get_running_app()
-        acuerdos = app.db.listar_acuerdos(self._reunion_id)
         lista = self.ids.acuerdos_plazo_list
         lista.clear_widgets()
+        if not self._acuerdos_visibles:
+            return
+        acuerdos = app.db.listar_acuerdos(self._reunion_id)
         if not acuerdos:
             lista.add_widget(MDLabel(
                 text='Sin acuerdos con plazo registrados.',
@@ -937,76 +949,225 @@ class DetalleReunionScreen(MDScreen):
                 theme_text_color='Secondary',
             ))
             return
-        for ac in acuerdos:
-            self._agregar_card_acuerdo(lista, ac)
+        for i, ac in enumerate(acuerdos, start=1):
+            self._agregar_card_acuerdo(lista, ac, i)
 
-    def _agregar_card_acuerdo(self, lista, ac):
-        from datetime import datetime
-        hoy = datetime.now().strftime('%Y-%m-%d')
-        plazo = ac.get('plazo', '')
-        if plazo < hoy:
-            color = (0.8, 0.1, 0.1, 0.12)
-            icono = 'alert-circle'
-        elif plazo == hoy:
-            color = (0.9, 0.5, 0.0, 0.12)
-            icono = 'bell-ring'
-        else:
-            color = (0.13, 0.55, 0.13, 0.10)
-            icono = 'bell-check'
+    def _agregar_card_acuerdo(self, lista, ac, numero=None):
+        lista.add_widget(crear_tarjeta_acuerdo(
+            ac,
+            on_toggle_estado=self._toggle_estado_acuerdo,
+            on_eliminar=self._eliminar_acuerdo_plazo,
+            on_editar=self._editar_acuerdo_plazo,
+            numero=numero,
+        ))
 
-        card = MDCard(
-            orientation='horizontal',
-            padding=dp(8),
-            size_hint_y=None,
-            height=dp(56),
-            radius=[8],
-            md_bg_color=color,
-        )
-        lbl = MDLabel(
-            text=f'• {ac["texto"]}\n  Plazo: {plazo}',
-            font_style='Caption',
-            adaptive_height=True,
-        )
-        btn_del = MDIconButton(
-            icon='close',
-            size_hint_x=None,
-            width=dp(36),
-        )
-        ac_id = ac['id']
-        btn_del.bind(on_release=lambda _, i=ac_id: self._eliminar_acuerdo_plazo(i))
-        card.add_widget(MDIconButton(icon=icono, size_hint_x=None, width=dp(36), disabled=True))
-        card.add_widget(lbl)
-        card.add_widget(btn_del)
-        lista.add_widget(card)
-
-    def _eliminar_acuerdo_plazo(self, acuerdo_id):
-        App.get_running_app().db.eliminar_acuerdo(acuerdo_id)
+    def _toggle_estado_acuerdo(self, acuerdo_id, estaba_completado):
+        nuevo_estado = 'pendiente' if estaba_completado else 'completado'
+        App.get_running_app().db.marcar_estado_acuerdo(acuerdo_id, nuevo_estado)
         self._cargar_acuerdos_plazo()
 
+    def _eliminar_acuerdo_plazo(self, acuerdo_id):
+        def _borrar(_):
+            App.get_running_app().db.eliminar_acuerdo(acuerdo_id)
+            self._dlg_confirmar_acuerdo.dismiss()
+            self._cargar_acuerdos_plazo()
+
+        self._dlg_confirmar_acuerdo = MDDialog(
+            title='Confirmar eliminación',
+            text='¿Deseas eliminar este acuerdo permanentemente?',
+            buttons=[
+                MDFlatButton(text='CANCELAR', on_release=lambda x: self._dlg_confirmar_acuerdo.dismiss()),
+                MDRaisedButton(
+                    text='ELIMINAR',
+                    md_bg_color=(0.8, 0.1, 0.1, 1),
+                    on_release=_borrar,
+                ),
+            ],
+        )
+        self._dlg_confirmar_acuerdo.open()
+
+    def _set_prioridad_nuevo_acuerdo(self, clave):
+        self._prioridad_nuevo_acuerdo = clave
+
+    def _abrir_menu_traer_acuerdo(self, boton, campo_texto):
+        from kivymd.uix.menu import MDDropdownMenu
+
+        lineas = [
+            re.sub(r'^\d+\.- ', '', l).strip()
+            for l in self.ids.conclusion_field.text.split('\n')
+        ]
+        lineas = [l for l in lineas if l]
+        if not lineas:
+            self._mostrar_info('Aviso', 'No hay texto en "ACUERDOS Y COMPROMISOS" para traer.')
+            return
+
+        menu_holder = []
+
+        def _elegir(texto):
+            campo_texto.text = texto
+            if menu_holder:
+                menu_holder[0].dismiss()
+
+        menu_items = [
+            {
+                'text': (linea[:40] + '…') if len(linea) > 40 else linea,
+                'on_release': (lambda t=linea: _elegir(t)),
+            }
+            for linea in lineas
+        ]
+        menu = MDDropdownMenu(caller=boton, items=menu_items, width_mult=5)
+        menu_holder.append(menu)
+        menu.open()
+
     def agregar_acuerdo_plazo(self):
-        self._texto_nuevo_acuerdo = ''
-        self._plazo_nuevo_acuerdo = ''
+        self._abrir_dialogo_acuerdo(None)
 
+    def _editar_acuerdo_plazo(self, acuerdo):
+        self._abrir_dialogo_acuerdo(acuerdo)
+
+    def _abrir_dialogo_acuerdo(self, acuerdo):
         from kivymd.uix.textfield import MDTextField as TF
-        from kivymd.uix.button import MDRaisedButton as MRB
+        from kivymd.uix.menu import MDDropdownMenu
 
-        campo_texto = CampoOrtografico(hint_text='Descripción del acuerdo', mode='rectangle')
-        campo_plazo = TF(hint_text='Plazo (YYYY-MM-DD)', mode='rectangle')
+        app = App.get_running_app()
+        participantes = [p['nombre'] for p in app.db.listar_participantes(self._reunion_id)]
+        self._prioridad_nuevo_acuerdo = acuerdo.get('prioridad', 'media') if acuerdo else 'media'
+
+        campo_texto = CampoOraciones(
+            hint_text='Descripción del acuerdo (uno por línea si son varios)',
+            mode='rectangle', multiline=True, size_hint_y=None, height=dp(90),
+        )
+        lbl_voz_texto = MDLabel(
+            text='', font_style='Caption', halign='center', adaptive_height=True,
+            theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
+        )
+        btn_mic_texto = MDIconButton(
+            icon='microphone', theme_icon_color='Custom',
+            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        )
+        btn_borrar_texto = MDIconButton(icon='eraser', size_hint_x=None, width=dp(36))
+        dictado_texto = DictadoVoz(campo=campo_texto, boton_mic=btn_mic_texto, lbl_estado=lbl_voz_texto)
+        btn_mic_texto.bind(on_release=lambda _: dictado_texto.toggle())
+        btn_borrar_texto.bind(
+            on_press=lambda _: campo_texto.delete_selection() if campo_texto.selection_text else None
+        )
+        btn_traer_texto = MDIconButton(
+            icon='database-import-outline', theme_icon_color='Custom',
+            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        )
+        btn_traer_texto.bind(on_release=lambda _: self._abrir_menu_traer_acuerdo(btn_traer_texto, campo_texto))
+        fila_texto_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+        fila_texto_iconos.add_widget(MDLabel(
+            text='Descripción del acuerdo', font_style='Caption', adaptive_height=True,
+            theme_text_color='Secondary',
+        ))
+        fila_texto_iconos.add_widget(btn_mic_texto)
+        fila_texto_iconos.add_widget(btn_borrar_texto)
+        fila_texto_iconos.add_widget(btn_traer_texto)
+
+        campo_resp = CampoOraciones(hint_text='Responsable (opcional)', mode='rectangle')
+        lbl_voz_resp = MDLabel(
+            text='', font_style='Caption', halign='center', adaptive_height=True,
+            theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
+        )
+        btn_mic_resp = MDIconButton(
+            icon='microphone', theme_icon_color='Custom',
+            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        )
+        btn_borrar_resp = MDIconButton(icon='eraser', size_hint_x=None, width=dp(36))
+        dictado_resp = DictadoVoz(campo=campo_resp, boton_mic=btn_mic_resp, lbl_estado=lbl_voz_resp)
+        btn_mic_resp.bind(on_release=lambda _: dictado_resp.toggle())
+        btn_borrar_resp.bind(
+            on_press=lambda _: campo_resp.delete_selection() if campo_resp.selection_text else None
+        )
+        campo_plazo = TF(hint_text='Plazo (DD/MM/AAAA)', mode='rectangle', size_hint_x=.5)
         campo_plazo.bind(on_focus=lambda inst, val: self._abrir_cal_acuerdo(inst, campo_plazo) if val else None)
+        btn_cal_plazo = MDIconButton(icon='calendar', size_hint_x=None, width=dp(40))
+        btn_cal_plazo.bind(on_release=lambda _: self._abrir_cal_acuerdo(None, campo_plazo))
+        campo_plazo_hora = TF(hint_text='Hora (opcional)', mode='rectangle', size_hint_x=.4)
+        campo_plazo_hora.bind(on_focus=lambda inst, val: self._abrir_hora_acuerdo(inst, campo_plazo_hora) if val else None)
+        btn_reloj_plazo = MDIconButton(icon='clock-outline', size_hint_x=None, width=dp(40))
+        btn_reloj_plazo.bind(on_release=lambda _: self._abrir_hora_acuerdo(None, campo_plazo_hora))
+        fila_plazo = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+        fila_plazo.add_widget(campo_plazo)
+        fila_plazo.add_widget(btn_cal_plazo)
+        fila_plazo.add_widget(campo_plazo_hora)
+        fila_plazo.add_widget(btn_reloj_plazo)
+
+        fila_resp = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+        fila_resp.add_widget(campo_resp)
+        fila_resp.add_widget(btn_mic_resp)
+        fila_resp.add_widget(btn_borrar_resp)
+        if participantes:
+            menu_holder = []
+
+            def _elegir_responsable(nombre):
+                campo_resp.text = nombre
+                if menu_holder:
+                    menu_holder[0].dismiss()
+
+            btn_resp = MDIconButton(icon='account-arrow-down', size_hint_x=None, width=dp(40))
+            menu_items = [
+                {'text': nombre, 'on_release': (lambda n=nombre: _elegir_responsable(n))}
+                for nombre in participantes
+            ]
+            menu_resp = MDDropdownMenu(caller=btn_resp, items=menu_items, width_mult=4)
+            menu_holder.append(menu_resp)
+            btn_resp.bind(on_release=lambda _: menu_resp.open())
+            fila_resp.add_widget(btn_resp)
+
+        fila_prioridad = MDBoxLayout(adaptive_height=True, spacing=dp(6))
+
+        def _refrescar_prioridad(*_a):
+            fila_prioridad.clear_widgets()
+            fila_prioridad.add_widget(MDLabel(
+                text='Prioridad:', font_style='Caption', adaptive_height=True,
+                size_hint_x=None, width=dp(64),
+            ))
+            for clave, etiqueta, color in PRIORIDADES:
+                seleccionado = clave == self._prioridad_nuevo_acuerdo
+                btn = MDRaisedButton(
+                    text=etiqueta,
+                    size_hint_x=None,
+                    width=dp(72),
+                    md_bg_color=color if seleccionado else (0.85, 0.85, 0.85, 1),
+                )
+                btn.bind(on_release=lambda _, c=clave: (self._set_prioridad_nuevo_acuerdo(c), _refrescar_prioridad()))
+                fila_prioridad.add_widget(btn)
+
+        _refrescar_prioridad()
+
+        if acuerdo:
+            campo_texto.text = acuerdo.get('texto', '')
+            campo_resp.text = acuerdo.get('responsable', '')
+            campo_plazo_hora.text = acuerdo.get('plazo_hora', '')
+            if acuerdo.get('plazo'):
+                try:
+                    campo_plazo.text = datetime.strptime(acuerdo['plazo'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                except ValueError:
+                    pass
 
         contenido = MDBoxLayout(orientation='vertical', adaptive_height=True, spacing=dp(8), padding=[0, dp(8)])
+        contenido.add_widget(fila_texto_iconos)
         contenido.add_widget(campo_texto)
-        contenido.add_widget(campo_plazo)
+        contenido.add_widget(lbl_voz_texto)
+        contenido.add_widget(fila_resp)
+        contenido.add_widget(lbl_voz_resp)
+        contenido.add_widget(fila_prioridad)
+        contenido.add_widget(fila_plazo)
 
+        acuerdo_id = acuerdo['id'] if acuerdo else None
         self._dlg_acuerdo = MDDialog(
-            title='Nuevo acuerdo con plazo',
+            title=('Editar acuerdo' if acuerdo else 'Nuevo acuerdo con plazo'),
             type='custom',
             content_cls=contenido,
             buttons=[
                 MDFlatButton(text='CANCELAR', on_release=lambda x: self._dlg_acuerdo.dismiss()),
                 MDRaisedButton(
                     text='GUARDAR',
-                    on_release=lambda x: self._guardar_nuevo_acuerdo(campo_texto.text, campo_plazo.text),
+                    on_release=lambda x: self._guardar_dialogo_acuerdo(
+                        acuerdo_id, campo_texto.text, campo_plazo.text, campo_resp.text, campo_plazo_hora.text,
+                    ),
                 ),
             ],
         )
@@ -1014,17 +1175,39 @@ class DetalleReunionScreen(MDScreen):
 
     def _abrir_cal_acuerdo(self, instance, campo):
         picker = MDDatePicker()
-        picker.bind(on_save=lambda inst, val, *a: setattr(campo, 'text', val.strftime('%Y-%m-%d')))
+        picker.bind(on_save=lambda inst, val, *a: setattr(campo, 'text', val.strftime('%d/%m/%Y')))
         picker.open()
 
-    def _guardar_nuevo_acuerdo(self, texto, plazo):
+    def _abrir_hora_acuerdo(self, instance, campo):
+        picker = MDTimePicker()
+        picker.bind(on_save=lambda inst, val, *a: setattr(campo, 'text', val.strftime('%H:%M')))
+        picker.open()
+        Clock.schedule_once(lambda dt: picker._switch_input(), 0.3)
+
+    def _guardar_dialogo_acuerdo(self, acuerdo_id, texto, plazo, responsable='', plazo_hora=''):
         texto = texto.strip()
         plazo = plazo.strip()
+        responsable = responsable.strip()
+        plazo_hora = plazo_hora.strip()
         if not texto or not plazo:
             self._mostrar_info('Aviso', 'Escribe el acuerdo y selecciona un plazo.')
             return
+        try:
+            plazo_iso = datetime.strptime(plazo, '%d/%m/%Y').strftime('%Y-%m-%d')
+        except ValueError:
+            self._mostrar_info('Aviso', 'Formato de plazo inválido. Usa el calendario para seleccionarlo (DD/MM/AAAA).')
+            return
         self._dlg_acuerdo.dismiss()
-        App.get_running_app().db.guardar_acuerdo(self._reunion_id, texto, plazo)
+        prioridad = getattr(self, '_prioridad_nuevo_acuerdo', 'media')
+        db = App.get_running_app().db
+        if acuerdo_id:
+            db.actualizar_acuerdo(acuerdo_id, texto, plazo_iso, responsable, prioridad, plazo_hora)
+        else:
+            # Varias líneas = varios acuerdos separados, todos con el mismo
+            # responsable/plazo/prioridad elegidos en este diálogo.
+            lineas = [l.strip() for l in texto.split('\n') if l.strip()]
+            for linea in lineas:
+                db.guardar_acuerdo(self._reunion_id, linea, plazo_iso, responsable, prioridad, plazo_hora)
         self._cargar_acuerdos_plazo()
 
     def abrir_fecha_reprog(self):
@@ -1121,6 +1304,11 @@ class DetalleReunionScreen(MDScreen):
             _grabando = True
             self.ids.btn_grabar.text = 'DETENER GRABACIÓN'
             self.ids.btn_grabar.md_bg_color = (0.8, 0.1, 0.1, 1)
+            from utils.config import cargar as cargar_config
+            from utils import llamadas
+            mensaje = cargar_config().get('sms_auto_respuesta', '')
+            if mensaje:
+                llamadas.iniciar(mensaje)
         except Exception as e:
             self._mostrar_info('Grabación', f'No disponible: {e}')
 
@@ -1131,6 +1319,8 @@ class DetalleReunionScreen(MDScreen):
             audio.stop()
         except Exception:
             pass
+        from utils import llamadas
+        llamadas.detener()
         _grabando = False
         self.ids.btn_grabar.text = 'GRABAR REUNIÓN'
         self.ids.btn_grabar.md_bg_color = (0.13, 0.40, 0.75, 1)

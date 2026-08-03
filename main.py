@@ -116,6 +116,7 @@ try:
     from screens.perfil_screen import PerfilScreen
     from screens.login_screen import LoginScreen
     from screens.en_reunion_screen import EnReunionScreen
+    from screens.seguimiento_screen import SeguimientoScreen
 
     _KV = '''
 MDBoxLayout:
@@ -155,6 +156,9 @@ MDBoxLayout:
         EnReunionScreen:
             name: "en_reunion"
 
+        SeguimientoScreen:
+            name: "seguimiento"
+
     MDBoxLayout:
         id: bottom_bar
         size_hint_y: None
@@ -168,16 +172,16 @@ MDBoxLayout:
             on_release: app.go_to("dashboard")
 
         MDIconButton:
-            icon: "plus-circle-outline"
-            theme_icon_color: "Custom"
-            icon_color: 1,1,1,1
-            on_release: app.go_to("nueva_reunion")
-
-        MDIconButton:
             icon: "format-list-bulleted"
             theme_icon_color: "Custom"
             icon_color: 1,1,1,1
             on_release: app.go_to("lista_reuniones")
+
+        MDIconButton:
+            icon: "checkbox-marked-circle-outline"
+            theme_icon_color: "Custom"
+            icon_color: 1,1,1,1
+            on_release: app.go_to("seguimiento")
 
         MDIconButton:
             icon: "account-circle"
@@ -331,6 +335,7 @@ MDBoxLayout:
             'perfil':          'dashboard',
             'en_reunion':      'detalle_reunion',
             'login':           'dashboard',
+            'seguimiento':     'dashboard',
         }
 
         def go_back(self):

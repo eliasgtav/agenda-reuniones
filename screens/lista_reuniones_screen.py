@@ -11,6 +11,8 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from utils.exportar import exportar_excel
 from utils.widgets import CampoOrtografico
+from utils.fechas import fecha_larga
+from utils.abrir_archivo import abrir as abrir_archivo
 
 Builder.load_string('''
 <ListaReunionesScreen>:
@@ -39,9 +41,14 @@ Builder.load_string('''
             spacing: '8dp'
 
             MDRaisedButton:
+                text: "+ NUEVA REUNIÓN"
+                on_release: app.go_to('nueva_reunion')
+                md_bg_color: 0.13, 0.40, 0.75, 1
+
+            MDRaisedButton:
                 text: "Exportar a Excel"
                 on_release: root.exportar('excel')
-                md_bg_color: 0.13, 0.40, 0.75, 1
+                md_bg_color: 0.40, 0.40, 0.40, 1
 
         MDScrollView:
             id: scroll_view
@@ -55,6 +62,7 @@ Builder.load_string('''
 
 FILTROS = [
     ('todas',       'Todas',        (0.40, 0.40, 0.40, 1)),
+    ('hoy',         'Hoy',          (0.13, 0.40, 0.75, 1)),
     ('pendiente',   'Pendientes',   (0.80, 0.65, 0.0,  1)),
     ('realizada',   'Realizadas',   (0.13, 0.55, 0.13, 1)),
     ('cancelada',   'Canceladas',   (0.80, 0.13, 0.13, 1)),
@@ -188,7 +196,7 @@ class ListaReunionesScreen(MDScreen):
         fila1.add_widget(estado_lbl)
         card.add_widget(fila1)
 
-        info = f"{reunion['fecha']}  {reunion['hora']}  —  {reunion['lugar'] or 'Sin lugar'}"
+        info = f"{fecha_larga(reunion['fecha'])}  {reunion['hora']}  —  {reunion['lugar'] or 'Sin lugar'}"
         card.add_widget(MDLabel(
             text=info,
             font_style='Caption',
@@ -219,6 +227,7 @@ class ListaReunionesScreen(MDScreen):
     def _abrir_detalle(self, reunion_id):
         app = App.get_running_app()
         app.reunion_activa_id = reunion_id
+        app._PARENT_SCREEN['detalle_reunion'] = 'lista_reuniones'
         app.go_to('detalle_reunion')
 
     def _confirmar_borrar(self, reunion_id):
@@ -250,10 +259,34 @@ class ListaReunionesScreen(MDScreen):
             busqueda=self._busqueda or None,
         )
         ruta = exportar_excel(reuniones, app.db)
-        msg = f'Archivo guardado en Descargas:\n{ruta}' if ruta else 'Error al exportar. Verifique que openpyxl esté instalado.'
+        if not ruta:
+            dialog = MDDialog(
+                title='Error',
+                text='Error al exportar. Verifique que openpyxl esté instalado.',
+                buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
+            )
+            dialog.open()
+            return
+
+        def _abrir(_x):
+            import os
+            dialog.dismiss()
+            abrir_archivo(ruta, os.path.basename(ruta), on_error=lambda m: self._mostrar_error_apertura(m))
+
         dialog = MDDialog(
-            title='Exportación completada' if ruta else 'Error',
-            text=msg,
+            title='Exportación completada',
+            text=f'Archivo guardado en Descargas:\n{ruta}\n\n¿Deseas abrirlo?',
+            buttons=[
+                MDFlatButton(text='NO', on_release=lambda x: dialog.dismiss()),
+                MDRaisedButton(text='ABRIR', on_release=_abrir),
+            ],
+        )
+        dialog.open()
+
+    def _mostrar_error_apertura(self, mensaje):
+        dialog = MDDialog(
+            title='Aviso',
+            text=mensaje,
             buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
         )
         dialog.open()

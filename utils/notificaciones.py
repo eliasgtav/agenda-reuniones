@@ -121,16 +121,18 @@ class NotificacionesManager:
             plazo = acuerdo['plazo']
             texto = acuerdo['texto']
             reunion = acuerdo['reunion_asunto']
+            responsable = acuerdo.get('responsable', '')
+            quien = f' asignado a {responsable}' if responsable else ''
 
             if plazo < hoy:
                 estado = 'VENCIDO'
-                voz = f'{saludo}acuerdo vencido de la reunión {reunion}: {texto}'
+                voz = f'{saludo}acuerdo vencido{quien} de la reunión {reunion}: {texto}'
             elif plazo == hoy:
                 estado = 'vence HOY'
-                voz = f'{saludo}acuerdo que vence hoy de la reunión {reunion}: {texto}'
+                voz = f'{saludo}acuerdo que vence hoy{quien} de la reunión {reunion}: {texto}'
             else:
                 estado = 'vence mañana'
-                voz = f'{saludo}acuerdo que vence mañana de la reunión {reunion}: {texto}'
+                voz = f'{saludo}acuerdo que vence mañana{quien} de la reunión {reunion}: {texto}'
 
             _notificar(
                 f'Acuerdo {estado}',

@@ -13,6 +13,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.card import MDCard
 from utils.widgets import CampoOrtografico
+from utils.fechas import fecha_larga
 
 Builder.load_string('''
 <EnReunionScreen>:
@@ -105,6 +106,15 @@ Builder.load_string('''
             font_size: '15sp'
             padding: ['8dp', '8dp']
 
+        # Responsable (opcional)
+        MDTextField:
+            id: responsable_field
+            hint_text: "Responsable (opcional)"
+            mode: "rectangle"
+            font_size: '14sp'
+            size_hint_y: None
+            height: '48dp'
+
         # Plazo de cumplimiento (opcional)
         MDBoxLayout:
             adaptive_height: True
@@ -175,6 +185,7 @@ class EnReunionScreen(MDScreen):
         self._acuerdos = []
         self.ids.lista_acuerdos.clear_widgets()
         self.ids.entrada_field.text = ''
+        self.ids.responsable_field.text = ''
         self.ids.plazo_field.text = ''
         self.ids.lbl_estado_voz.text = ''
 
@@ -182,7 +193,7 @@ class EnReunionScreen(MDScreen):
             r = app.db.obtener_reunion(self._reunion_id)
             if r:
                 self.ids.lbl_asunto_activo.text = r['asunto']
-                self.ids.lbl_hora_activa.text = f"{r['fecha']}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
+                self.ids.lbl_hora_activa.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
                 # Cargar acuerdos previos desde notas si hay
                 notas = r.get('notas', '')
                 if '=== ACUERDOS ===' in notas:
@@ -218,12 +229,15 @@ class EnReunionScreen(MDScreen):
         texto = self.ids.entrada_field.text.strip()
         if not texto:
             return
+        responsable = self.ids.responsable_field.text.strip()
         plazo = self.ids.plazo_field.text.strip()
         ts = datetime.now().strftime('%H:%M')
         plazo_label = f' — plazo: {plazo}' if plazo else ''
-        acuerdo = f'[{ts}] {texto}{plazo_label}'
-        self._acuerdos.append({'texto': acuerdo, 'plazo': plazo})
+        resp_label = f' — responsable: {responsable}' if responsable else ''
+        acuerdo = f'[{ts}] {texto}{resp_label}{plazo_label}'
+        self._acuerdos.append({'texto': acuerdo, 'plazo': plazo, 'responsable': responsable})
         self.ids.entrada_field.text = ''
+        self.ids.responsable_field.text = ''
         self.ids.plazo_field.text = ''
         self.ids.lbl_estado_voz.text = ''
         self._refrescar_lista()
@@ -285,7 +299,7 @@ class EnReunionScreen(MDScreen):
             if isinstance(a, dict):
                 textos.append(a['texto'])
                 if a.get('plazo'):
-                    app.db.guardar_acuerdo(self._reunion_id, a['texto'], a['plazo'])
+                    app.db.guardar_acuerdo(self._reunion_id, a['texto'], a['plazo'], a.get('responsable', ''))
             else:
                 textos.append(a)
         bloque = '\n\n=== ACUERDOS ===\n' + '\n'.join(f'• {t}' for t in textos)

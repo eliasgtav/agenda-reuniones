@@ -36,7 +36,7 @@ Builder.load_string('''
                     size_hint: None, None
                     size: '64dp', '64dp'
                     radius: [dp(32)]
-                    md_bg_color: .75, .75, .75, 1
+                    md_bg_color: 1, 1, 1, 1
 
                     Image:
                         id: avatar_img
@@ -89,6 +89,13 @@ Builder.load_string('''
                 text: "VER TODAS LAS REUNIONES"
                 pos_hint: {'center_x': .5}
                 on_release: app.go_to('lista_reuniones')
+
+            MDRaisedButton:
+                id: btn_seguimiento
+                text: "SEGUIMIENTO DE ACUERDOS"
+                pos_hint: {'center_x': .5}
+                md_bg_color: 0.13, 0.40, 0.75, 1
+                on_release: app.go_to('seguimiento')
 
             MDLabel:
                 text: "© Elías Gaytan Alvino"
@@ -202,6 +209,11 @@ class DashboardScreen(MDScreen):
         for key, etiqueta, color in STAT_CONFIG:
             grid.add_widget(_stat_card(stats.get(key, 0), etiqueta, color))
 
+        activos = db.contar_acuerdos_activos()
+        self.ids.btn_seguimiento.text = (
+            f'SEGUIMIENTO DE ACUERDOS ({activos})' if activos else 'SEGUIMIENTO DE ACUERDOS'
+        )
+
         lista = self.ids.lista_hoy
         lista.clear_widgets()
         reuniones = db.reuniones_hoy()
@@ -244,5 +256,13 @@ class DashboardScreen(MDScreen):
         config = cargar_config()
         self.ids.lbl_nombre.text = config.get('nombre', 'Usuario')
         foto = config.get('foto_perfil', '')
+        existe = bool(foto) and os.path.exists(foto)
         self.ids.avatar_img.source = ''
-        self.ids.avatar_img.source = foto if foto and os.path.exists(foto) else ''
+        self.ids.avatar_img.source = foto if existe else ''
+        # Sin foto, Image(source='') igual pinta un rectángulo blanco sólido
+        # (Kivy dibuja el Rectangle del canvas del Image con el Color blanco
+        # por defecto cuando no hay texture) encima del MDCard circular --
+        # se ve como un cuadrado blanco tapando el círculo gris de fondo.
+        # Ocultando el Image cuando no hay foto real, se ve el MDCard
+        # (ya circular por su radius) sin nada encima.
+        self.ids.avatar_img.opacity = 1 if existe else 0

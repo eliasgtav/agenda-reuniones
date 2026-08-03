@@ -17,7 +17,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
 from utils.voz import DictadoVoz
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoOrtografico, CampoOraciones
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -52,7 +52,7 @@ Builder.load_string('''
                     size: '140dp', '140dp'
                     radius: [dp(70)]
                     elevation: 4
-                    md_bg_color: .85, .85, .85, 1
+                    md_bg_color: 1, 1, 1, 1
                     ripple_behavior: True
                     on_release: root.elegir_foto()
 
@@ -198,6 +198,30 @@ Builder.load_string('''
                 adaptive_height: True
                 theme_text_color: "Secondary"
 
+            # ── Auto-respuesta de llamadas al grabar ──────────────────
+            MDLabel:
+                text: "Auto-respuesta de llamadas al grabar"
+                font_style: "Subtitle1"
+                adaptive_height: True
+
+            MDLabel:
+                text: "Si entra una llamada mientras grabas una reunión, se envía este SMS automático a quien llama (Android no permite contestar ni reproducir un mensaje de voz)"
+                font_style: "Caption"
+                adaptive_height: True
+                theme_text_color: "Secondary"
+
+            CampoOraciones:
+                id: sms_auto_field
+                hint_text: "Mensaje automático"
+                mode: "rectangle"
+                multiline: True
+
+            MDRaisedButton:
+                text: "GUARDAR MENSAJE"
+                md_bg_color: 0.13, 0.55, 0.13, 1
+                pos_hint: {"center_x": .5}
+                on_release: root.guardar_sms_auto()
+
             MDLabel:
                 text: "Zona de peligro"
                 font_style: "Subtitle1"
@@ -248,11 +272,15 @@ class PerfilScreen(MDScreen):
         self.ids.apellidos_field.text = config.get('apellidos', '')
         self.ids.lbl_voz_estado.text  = ''
         foto = config.get('foto_perfil', '')
-        self.ids.foto_img.source = foto if foto and os.path.exists(foto) else ''
+        existe = bool(foto) and os.path.exists(foto)
+        self.ids.foto_img.source = foto if existe else ''
+        # Ver nota completa en dashboard_screen.py::actualizar_perfil.
+        self.ids.foto_img.opacity = 1 if existe else 0
         self.ids.correo_origen_field.text  = config.get('correo_origen', '')
         self.ids.correo_password_field.text = config.get('correo_password', '')
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
         self.ids.smtp_server_field.text     = config.get('smtp_server', 'smtp.gmail.com')
+        self.ids.sms_auto_field.text        = config.get('sms_auto_respuesta', '')
         self._forzar_scroll_arriba()
 
     def borrar_seleccion(self, field_id):
@@ -299,23 +327,42 @@ class PerfilScreen(MDScreen):
         return dest_dir, os.path.join(dest_dir, 'foto_perfil.png')
 
     def elegir_foto(self):
+        config = cargar()
+        foto_actual = config.get('foto_perfil', '')
+        tiene_foto = bool(foto_actual) and os.path.exists(foto_actual)
+
+        botones = [MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss())]
+        if tiene_foto:
+            botones.append(MDFlatButton(
+                text='QUITAR FOTO',
+                theme_text_color='Custom',
+                text_color=(0.8, 0.1, 0.1, 1),
+                on_release=lambda x: [dialog.dismiss(), self._quitar_foto()],
+            ))
+        botones.append(MDFlatButton(
+            text='GALERÍA',
+            on_release=lambda x: [dialog.dismiss(), self._desde_galeria()],
+        ))
+        botones.append(MDRaisedButton(
+            text='CÁMARA',
+            md_bg_color=(0.13, 0.40, 0.75, 1),
+            on_release=lambda x: [dialog.dismiss(), self._desde_camara()],
+        ))
+
         dialog = MDDialog(
             title='Foto de perfil',
             text='¿De dónde quieres tomar la foto?',
-            buttons=[
-                MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss()),
-                MDFlatButton(
-                    text='GALERÍA',
-                    on_release=lambda x: [dialog.dismiss(), self._desde_galeria()],
-                ),
-                MDRaisedButton(
-                    text='CÁMARA',
-                    md_bg_color=(0.13, 0.40, 0.75, 1),
-                    on_release=lambda x: [dialog.dismiss(), self._desde_camara()],
-                ),
-            ],
+            buttons=botones,
         )
         dialog.open()
+
+    def _quitar_foto(self):
+        config = cargar()
+        config['foto_perfil'] = ''
+        guardar(config)
+        self.ids.foto_img.source = ''
+        self.ids.foto_img.opacity = 0
+        App.get_running_app().actualizar_foto_dashboard()
 
     def _desde_galeria(self):
         # plyer.filechooser en Android devuelve URIs content:// que PIL no
@@ -504,6 +551,7 @@ class PerfilScreen(MDScreen):
 
         self.ids.foto_img.source = ''
         self.ids.foto_img.source = dest
+        self.ids.foto_img.opacity = 1
         config = cargar()
         config['foto_perfil'] = dest
         guardar(config)
@@ -532,6 +580,12 @@ class PerfilScreen(MDScreen):
             ), 0)
 
         probar_conexion(cargar_config(), callback=_resultado)
+
+    def guardar_sms_auto(self):
+        config = cargar()
+        config['sms_auto_respuesta'] = self.ids.sms_auto_field.text.strip()
+        guardar(config)
+        self._mostrar('Guardado', 'Mensaje automático guardado.')
 
     def guardar_perfil(self):
         nombres   = self.ids.nombres_field.text.strip()
