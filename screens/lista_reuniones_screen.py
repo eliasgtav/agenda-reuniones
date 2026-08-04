@@ -30,23 +30,19 @@ Builder.load_string('''
             on_text: root.on_busqueda(self.text)
 
         MDBoxLayout:
+            orientation: 'vertical'
             size_hint_y: None
-            height: '40dp'
+            height: '96dp'
             spacing: '4dp'
             id: filtros_bar
 
         MDBoxLayout:
             size_hint_y: None
             height: '40dp'
-            spacing: '8dp'
-
-            MDRaisedButton:
-                text: "+ NUEVA REUNIÓN"
-                on_release: app.go_to('nueva_reunion')
-                md_bg_color: 0.13, 0.40, 0.75, 1
 
             MDRaisedButton:
                 text: "Exportar a Excel"
+                pos_hint: {"center_x": .5}
                 on_release: root.exportar('excel')
                 md_bg_color: 0.40, 0.40, 0.40, 1
 
@@ -105,15 +101,19 @@ class ListaReunionesScreen(MDScreen):
     def _construir_filtros(self):
         bar = self.ids.filtros_bar
         bar.clear_widgets()
-        for clave, etiqueta, color in FILTROS:
-            btn = MDRaisedButton(
-                text=etiqueta,
-                md_bg_color=color,
-                size_hint_x=None,
-                width=dp(90),
-            )
-            btn.bind(on_release=lambda _, k=clave: self.filtrar(k))
-            bar.add_widget(btn)
+        mitad = len(FILTROS) // 2
+        for fila_filtros in (FILTROS[:mitad], FILTROS[mitad:]):
+            fila = MDBoxLayout(size_hint_y=None, height=dp(44), spacing=dp(4))
+            for clave, etiqueta, color in fila_filtros:
+                btn = MDRaisedButton(
+                    text=etiqueta,
+                    md_bg_color=color,
+                    size_hint=(1, 1),
+                    _radius=dp(14),
+                )
+                btn.bind(on_release=lambda _, k=clave: self.filtrar(k))
+                fila.add_widget(btn)
+            bar.add_widget(fila)
 
     def filtrar(self, estado):
         self._filtro_activo = estado

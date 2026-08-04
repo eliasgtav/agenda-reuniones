@@ -1,5 +1,6 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import os
+import shutil
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.metrics import dp
@@ -12,11 +13,10 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.image import Image as KivyImage
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
+from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
-from utils.voz import DictadoVoz
 from utils.widgets import CampoOrtografico, CampoOraciones
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
@@ -52,94 +52,72 @@ Builder.load_string('''
                     size: '140dp', '140dp'
                     radius: [dp(70)]
                     elevation: 4
-                    md_bg_color: 1, 1, 1, 1
+                    md_bg_color: app.theme_cls.primary_color
                     ripple_behavior: True
                     on_release: root.elegir_foto()
 
-                    Image:
-                        id: foto_img
-                        source: ""
-                        allow_stretch: True
-                        keep_ratio: False
+                    FloatLayout:
                         size_hint: 1, 1
 
-            MDLabel:
-                text: "Toca la foto para cambiarla"
-                font_style: "Caption"
-                halign: "center"
-                adaptive_height: True
-                theme_text_color: "Secondary"
+                        Image:
+                            id: foto_img
+                            source: ""
+                            allow_stretch: True
+                            keep_ratio: False
+                            size_hint: 1, 1
+                            pos_hint: {"x": 0, "y": 0}
+
+                        MDLabel:
+                            id: iniciales_lbl
+                            text: ""
+                            font_style: "H2"
+                            bold: False
+                            halign: "center"
+                            valign: "middle"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            size_hint: 1, 1
+                            pos_hint: {"x": 0, "y": 0}
+                            text_size: self.size
 
             MDBoxLayout:
+                orientation: 'vertical'
                 adaptive_height: True
-                spacing: '8dp'
+                spacing: '10dp'
 
                 CampoOrtografico:
                     id: nombres_field
                     hint_text: "Nombres *"
                     mode: "rectangle"
+                    size_hint_x: 0.75
+                    pos_hint: {"center_x": .5}
                     on_text: self.text = self.text.upper()
-
-                MDIconButton:
-                    id: nombres_mic
-                    icon: "microphone"
-                    size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('nombres_field', 'nombres_mic')
-
-                MDIconButton:
-                    icon: "eraser"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_press: root.borrar_seleccion('nombres_field')
-
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
 
                 CampoOrtografico:
                     id: apellidos_field
                     hint_text: "Apellidos *"
                     mode: "rectangle"
+                    size_hint_x: 0.75
+                    pos_hint: {"center_x": .5}
                     on_text: self.text = self.text.upper()
 
-                MDIconButton:
-                    id: apellidos_mic
-                    icon: "microphone"
+                MDRaisedButton:
+                    text: "CAMBIAR FOTO"
                     size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('apellidos_field', 'apellidos_mic')
+                    width: dp(160)
+                    pos_hint: {"center_x": .5}
+                    _radius: dp(14)
+                    md_bg_color: 0.40, 0.23, 0.72, 1
+                    on_release: root.elegir_foto()
 
-                MDIconButton:
-                    icon: "eraser"
+                MDRaisedButton:
+                    text: "GUARDAR PERFIL"
                     size_hint_x: None
-                    width: '36dp'
-                    on_press: root.borrar_seleccion('apellidos_field')
-
-            MDLabel:
-                id: lbl_voz_estado
-                text: ""
-                font_style: "Caption"
-                halign: "center"
-                adaptive_height: True
-                theme_text_color: "Custom"
-                text_color: 0.13, 0.55, 0.13, 1
-
-            MDRaisedButton:
-                text: "CAMBIAR FOTO"
-                pos_hint: {"center_x": .5}
-                md_bg_color: 0.40, 0.23, 0.72, 1
-                on_release: root.elegir_foto()
-
-            MDRaisedButton:
-                text: "GUARDAR PERFIL"
-                pos_hint: {"center_x": .5}
-                md_bg_color: 0.13, 0.40, 0.75, 1
-                on_release: root.guardar_perfil()
+                    width: dp(160)
+                    pos_hint: {"center_x": .5}
+                    _radius: dp(14)
+                    md_bg_color: 0.13, 0.40, 0.75, 1
+                    on_release: root.guardar_perfil()
 
             # ── Configuración de correo ───────────────────────────────
             MDLabel:
@@ -178,19 +156,19 @@ Builder.load_string('''
                 mode: "rectangle"
                 text: "smtp.gmail.com"
 
-            MDBoxLayout:
-                adaptive_height: True
-                spacing: '8dp'
+            MDRaisedButton:
+                text: "GUARDAR CORREO"
+                pos_hint: {"center_x": .5}
+                _radius: dp(14)
+                md_bg_color: 0.13, 0.55, 0.13, 1
+                on_release: root.guardar_correo()
 
-                MDRaisedButton:
-                    text: "GUARDAR CORREO"
-                    md_bg_color: 0.13, 0.55, 0.13, 1
-                    on_release: root.guardar_correo()
-
-                MDRaisedButton:
-                    text: "PROBAR ENVÍO"
-                    md_bg_color: 0.40, 0.23, 0.72, 1
-                    on_release: root.probar_correo()
+            MDRaisedButton:
+                text: "PROBAR ENVÍO"
+                pos_hint: {"center_x": .5}
+                _radius: dp(14)
+                md_bg_color: 0.40, 0.23, 0.72, 1
+                on_release: root.probar_correo()
 
             MDLabel:
                 text: "Para Gmail: activa verificación en 2 pasos y genera una 'Contraseña de aplicación' en tu cuenta Google."
@@ -219,11 +197,38 @@ Builder.load_string('''
             MDRaisedButton:
                 text: "GUARDAR MENSAJE"
                 md_bg_color: 0.13, 0.55, 0.13, 1
+                _radius: dp(14)
                 pos_hint: {"center_x": .5}
                 on_release: root.guardar_sms_auto()
 
+            # ── Copia de seguridad ─────────────────────────────────────
             MDLabel:
-                text: "Zona de peligro"
+                text: "Copia de seguridad"
+                font_style: "Subtitle1"
+                adaptive_height: True
+
+            MDLabel:
+                text: "Guarda un respaldo de tus reuniones en Descargas, util si vas a migrar a otro celular. En el celular nuevo usa Importar backup para traerlas de vuelta"
+                font_style: "Caption"
+                adaptive_height: True
+                theme_text_color: "Secondary"
+
+            MDRaisedButton:
+                text: "HACER BACKUP"
+                pos_hint: {"center_x": .5}
+                _radius: dp(14)
+                md_bg_color: 0.13, 0.40, 0.75, 1
+                on_release: root.hacer_backup()
+
+            MDRaisedButton:
+                text: "IMPORTAR BACKUP"
+                pos_hint: {"center_x": .5}
+                _radius: dp(14)
+                md_bg_color: 0.40, 0.23, 0.72, 1
+                on_release: root.importar_backup()
+
+            MDLabel:
+                text: "¡Cuidado!"
                 font_style: "Subtitle1"
                 adaptive_height: True
                 theme_text_color: "Custom"
@@ -232,6 +237,7 @@ Builder.load_string('''
             MDRaisedButton:
                 text: "ELIMINAR TODAS LAS REUNIONES"
                 pos_hint: {"center_x": .5}
+                _radius: dp(14)
                 md_bg_color: 0.8, 0.1, 0.1, 1
                 on_release: root.confirmar_borrar_bd()
 
@@ -251,7 +257,6 @@ Builder.load_string('''
 class PerfilScreen(MDScreen):
     _scroll_retry_events = None
     _load_event = None
-    _dictados = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -270,12 +275,13 @@ class PerfilScreen(MDScreen):
         config = cargar()
         self.ids.nombres_field.text   = config.get('nombres', '')
         self.ids.apellidos_field.text = config.get('apellidos', '')
-        self.ids.lbl_voz_estado.text  = ''
         foto = config.get('foto_perfil', '')
         existe = bool(foto) and os.path.exists(foto)
         self.ids.foto_img.source = foto if existe else ''
         # Ver nota completa en dashboard_screen.py::actualizar_perfil.
         self.ids.foto_img.opacity = 1 if existe else 0
+        self.ids.iniciales_lbl.opacity = 0 if existe else 1
+        self._actualizar_iniciales()
         self.ids.correo_origen_field.text  = config.get('correo_origen', '')
         self.ids.correo_password_field.text = config.get('correo_password', '')
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
@@ -283,24 +289,10 @@ class PerfilScreen(MDScreen):
         self.ids.sms_auto_field.text        = config.get('sms_auto_respuesta', '')
         self._forzar_scroll_arriba()
 
-    def borrar_seleccion(self, field_id):
-        campo = self.ids[field_id]
-        if campo.selection_text:
-            campo.delete_selection()
-
-    # ── Dictado por voz ──────────────────────────────────────────────
-
-    def toggle_voz(self, campo_id, boton_id):
-        if self._dictados is None:
-            self._dictados = {}
-        if campo_id not in self._dictados:
-            self._dictados[campo_id] = DictadoVoz(
-                campo=self.ids[campo_id],
-                boton_mic=self.ids[boton_id],
-                lbl_estado=self.ids.lbl_voz_estado,
-                on_permiso_denegado=self._mostrar_error,
-            )
-        self._dictados[campo_id].toggle()
+    def _actualizar_iniciales(self):
+        nombres   = self.ids.nombres_field.text.strip()
+        apellidos = self.ids.apellidos_field.text.strip()
+        self.ids.iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
 
     def _forzar_scroll_arriba(self):
         # Ver nota completa en dashboard_screen.py.
@@ -362,6 +354,7 @@ class PerfilScreen(MDScreen):
         guardar(config)
         self.ids.foto_img.source = ''
         self.ids.foto_img.opacity = 0
+        self.ids.iniciales_lbl.opacity = 1
         App.get_running_app().actualizar_foto_dashboard()
 
     def _desde_galeria(self):
@@ -552,6 +545,7 @@ class PerfilScreen(MDScreen):
         self.ids.foto_img.source = ''
         self.ids.foto_img.source = dest
         self.ids.foto_img.opacity = 1
+        self.ids.iniciales_lbl.opacity = 0
         config = cargar()
         config['foto_perfil'] = dest
         guardar(config)
@@ -601,8 +595,75 @@ class PerfilScreen(MDScreen):
         config['apellidos'] = apellidos
         config['nombre']    = f'{nombres} {apellidos}'
         guardar(config)
+        self._actualizar_iniciales()
         App.get_running_app().actualizar_foto_dashboard()
         self._mostrar('Guardado', f'Perfil actualizado:\n{nombres} {apellidos}')
+
+    def hacer_backup(self):
+        from utils.exportar import hacer_backup
+        try:
+            ruta = hacer_backup(App.get_running_app().db)
+        except Exception as e:
+            self._mostrar('Error', f'No se pudo hacer el backup: {e}')
+            return
+        self._mostrar('Backup creado', f'Se guardó en:\n{ruta}')
+
+    def importar_backup(self):
+        if platform == 'android':
+            from android.storage import app_storage_path
+            from utils.archivo_selector import abrir_selector
+            dest_dir = os.path.join(app_storage_path(), 'adjuntos')
+            abrir_selector(dest_dir, self._on_backup_seleccionado, self._mostrar_error)
+            return
+        try:
+            from plyer import filechooser
+
+            def _on_seleccion(seleccion):
+                if not seleccion:
+                    return
+                ruta = seleccion[0]
+                self._on_backup_seleccionado(ruta, os.path.basename(ruta))
+
+            filechooser.open_file(on_selection=_on_seleccion, filters=['*.db'])
+        except Exception as e:
+            self._mostrar('Error', f'No se pudo abrir el selector: {e}')
+
+    def _on_backup_seleccionado(self, ruta, nombre):
+        import sqlite3
+        try:
+            conn = sqlite3.connect(ruta)
+            conn.execute("SELECT 1 FROM reuniones LIMIT 1")
+            conn.close()
+        except Exception:
+            self._mostrar('Error', 'El archivo elegido no es un backup válido de esta app.')
+            return
+
+        dialog = MDDialog(
+            title='¿Importar este backup?',
+            text=(
+                'Se reemplazarán TODAS las reuniones actuales por las del '
+                'backup. Esta acción no se puede deshacer. Después de '
+                'importar, cierra y vuelve a abrir la app.'
+            ),
+            buttons=[
+                MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss()),
+                MDRaisedButton(
+                    text='IMPORTAR',
+                    md_bg_color=(0.13, 0.40, 0.75, 1),
+                    on_release=lambda x: [dialog.dismiss(), self._restaurar_backup(ruta)],
+                ),
+            ],
+        )
+        dialog.open()
+
+    def _restaurar_backup(self, ruta):
+        app = App.get_running_app()
+        try:
+            shutil.copy2(ruta, app.db.db_path)
+        except Exception as e:
+            self._mostrar('Error', f'No se pudo importar el backup: {e}')
+            return
+        self._mostrar('Backup importado', 'Cierra y vuelve a abrir la app para ver los datos importados.')
 
     def confirmar_borrar_bd(self):
         dialog = MDDialog(

@@ -1,6 +1,7 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import csv
 import os
+import shutil
 from datetime import datetime
 
 
@@ -106,4 +107,12 @@ def exportar_excel(reuniones, db):
 
     ruta = _ruta_salida('agenda_reuniones') + '.xlsx'
     wb.save(ruta)
+    return ruta
+
+
+def hacer_backup(db):
+    """Copia el archivo SQLite completo a Descargas, para migrar a otro
+    celular reemplazando el agenda_reuniones.db de la instalacion nueva."""
+    ruta = _ruta_salida('agenda_backup') + '.db'
+    shutil.copy2(db.db_path, ruta)
     return ruta

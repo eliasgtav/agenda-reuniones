@@ -124,13 +124,8 @@ MDBoxLayout:
 
     MDTopAppBar:
         id: toolbar
-        title: "Agenda de Reuniones"
+        title: "AGENDA DE REUNIONES"
         elevation: 4
-        right_action_items:
-            [
-            ["weather-night", lambda x: app.toggle_dark_mode(), "Modo oscuro"],
-            ["home", lambda x: app.go_to("dashboard"), "Inicio"]
-            ]
 
     ScreenManager:
         id: sm
@@ -172,6 +167,12 @@ MDBoxLayout:
             on_release: app.go_to("dashboard")
 
         MDIconButton:
+            icon: "plus-circle-outline"
+            theme_icon_color: "Custom"
+            icon_color: 1,1,1,1
+            on_release: app.go_to("nueva_reunion")
+
+        MDIconButton:
             icon: "format-list-bulleted"
             theme_icon_color: "Custom"
             icon_color: 1,1,1,1
@@ -188,6 +189,12 @@ MDBoxLayout:
             theme_icon_color: "Custom"
             icon_color: 1,1,1,1
             on_release: app.go_to("perfil")
+
+        MDIconButton:
+            icon: "weather-night"
+            theme_icon_color: "Custom"
+            icon_color: 1,1,1,1
+            on_release: app.toggle_dark_mode()
 '''
 
     class AgendaApp(MDApp):
@@ -219,6 +226,7 @@ MDBoxLayout:
             # agregada y con layout resuelto) usan FadeTransition (fluido,
             # sin destello). Ver _ir_a() mas abajo.
             root.ids.sm.transition = NoTransition()
+            root.ids.toolbar.ids.label_title.bold = True
             # OJO: no pre-marcar 'dashboard' como visitada aqui. Aunque se
             # agrega al arbol de forma sincrona arriba, login_screen.py
             # navega a dashboard con app.go_to('dashboard') justo despues de
