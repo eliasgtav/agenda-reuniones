@@ -1,155 +1,117 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 from kivy.lang import Builder
+from kivy.metrics import dp
 from kivy.app import App
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
-from utils.voz import DictadoVoz
 from utils.widgets import CampoOrtografico
 
 Builder.load_string('''
 <LoginScreen>:
-    MDBoxLayout:
-        orientation: 'vertical'
-        padding: '32dp'
-        spacing: '20dp'
-        md_bg_color: app.theme_cls.bg_normal
-
+    MDScrollView:
         MDBoxLayout:
-            size_hint_y: None
-            height: '40dp'
-
-        MDLabel:
-            text: "Agenda de Reuniones"
-            font_style: "H4"
-            halign: "center"
+            orientation: 'vertical'
+            padding: '32dp'
+            spacing: '20dp'
             adaptive_height: True
-            theme_text_color: "Primary"
+            md_bg_color: app.theme_cls.bg_normal
 
-        MDLabel:
-            text: "Bienvenido"
-            font_style: "H6"
-            halign: "center"
-            adaptive_height: True
-            theme_text_color: "Secondary"
+            MDBoxLayout:
+                size_hint_y: None
+                height: '24dp'
 
-        MDLabel:
-            text: "Para comenzar, ingresa tu nombre completo"
-            font_style: "Body1"
-            halign: "center"
-            adaptive_height: True
-            theme_text_color: "Secondary"
+            # Círculo con iniciales en vivo, mismo lenguaje visual que Mi Perfil
+            AnchorLayout:
+                size_hint_y: None
+                height: '110dp'
+                anchor_x: 'center'
+                anchor_y: 'center'
 
-        MDBoxLayout:
-            size_hint_y: None
-            height: '20dp'
+                MDCard:
+                    size_hint: None, None
+                    size: '100dp', '100dp'
+                    radius: [dp(50)]
+                    elevation: 4
+                    md_bg_color: app.theme_cls.primary_color
 
-        MDBoxLayout:
-            adaptive_height: True
-            spacing: '8dp'
+                    MDLabel:
+                        id: iniciales_lbl
+                        text: ""
+                        font_style: "H4"
+                        halign: "center"
+                        valign: "middle"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        text_size: self.size
+
+            MDLabel:
+                text: "Agenda de Reuniones"
+                font_style: "H5"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Primary"
+
+            MDLabel:
+                text: "Ingresa tu nombre para comenzar"
+                font_style: "Body1"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Secondary"
+
+            MDBoxLayout:
+                size_hint_y: None
+                height: '10dp'
 
             CampoOrtografico:
                 id: nombres_field
                 hint_text: "Nombres *"
                 mode: "rectangle"
-                font_size: '15sp'
-                on_text: self.text = self.text.upper()
-
-            MDIconButton:
-                id: nombres_mic
-                icon: "microphone"
-                size_hint_x: None
-                width: '36dp'
-                theme_icon_color: "Custom"
-                icon_color: 0.13, 0.40, 0.75, 1
-                on_release: root.toggle_voz('nombres_field', 'nombres_mic')
-
-            MDIconButton:
-                icon: "eraser"
-                size_hint_x: None
-                width: '36dp'
-                on_press: root.borrar_seleccion('nombres_field')
-
-        MDBoxLayout:
-            adaptive_height: True
-            spacing: '8dp'
+                size_hint_x: 0.75
+                pos_hint: {"center_x": .5}
+                on_text: self.text = self.text.upper(); root._actualizar_iniciales()
 
             CampoOrtografico:
                 id: apellidos_field
                 hint_text: "Apellidos *"
                 mode: "rectangle"
-                font_size: '15sp'
-                on_text: self.text = self.text.upper()
+                size_hint_x: 0.75
+                pos_hint: {"center_x": .5}
+                on_text: self.text = self.text.upper(); root._actualizar_iniciales()
 
-            MDIconButton:
-                id: apellidos_mic
-                icon: "microphone"
+            MDBoxLayout:
+                size_hint_y: None
+                height: '10dp'
+
+            MDRaisedButton:
+                text: "INGRESAR A LA APP"
+                pos_hint: {"center_x": .5}
                 size_hint_x: None
-                width: '36dp'
-                theme_icon_color: "Custom"
-                icon_color: 0.13, 0.40, 0.75, 1
-                on_release: root.toggle_voz('apellidos_field', 'apellidos_mic')
+                width: dp(220)
+                _radius: dp(14)
+                md_bg_color: 0.13, 0.40, 0.75, 1
+                on_release: root.ingresar()
 
-            MDIconButton:
-                icon: "eraser"
-                size_hint_x: None
-                width: '36dp'
-                on_press: root.borrar_seleccion('apellidos_field')
+            MDBoxLayout:
+                size_hint_y: None
+                height: '20dp'
 
-        MDLabel:
-            id: lbl_voz_estado
-            text: ""
-            font_style: "Caption"
-            halign: "center"
-            adaptive_height: True
-            theme_text_color: "Custom"
-            text_color: 0.13, 0.55, 0.13, 1
-
-        MDBoxLayout:
-            size_hint_y: None
-            height: '16dp'
-
-        MDRaisedButton:
-            text: "INGRESAR A LA APP"
-            pos_hint: {"center_x": .5}
-            md_bg_color: 0.13, 0.40, 0.75, 1
-            size_hint_x: .9
-            height: '48dp'
-            on_release: root.ingresar()
-
-        MDBoxLayout:
-            size_hint_y: None
-            height: '30dp'
-
-        MDLabel:
-            text: "© Elías Gaytan Alvino"
-            font_style: "Caption"
-            halign: "center"
-            adaptive_height: True
-            theme_text_color: "Hint"
+            MDLabel:
+                text: "© Elías Gaytan Alvino"
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Hint"
 ''')
 
 
 class LoginScreen(MDScreen):
-    _dictados = None
 
-    def borrar_seleccion(self, field_id):
-        campo = self.ids[field_id]
-        if campo.selection_text:
-            campo.delete_selection()
-
-    def toggle_voz(self, campo_id, boton_id):
-        if self._dictados is None:
-            self._dictados = {}
-        if campo_id not in self._dictados:
-            self._dictados[campo_id] = DictadoVoz(
-                campo=self.ids[campo_id],
-                boton_mic=self.ids[boton_id],
-                lbl_estado=self.ids.lbl_voz_estado,
-                on_permiso_denegado=lambda texto: self._mostrar('Error', texto),
-            )
-        self._dictados[campo_id].toggle()
+    def _actualizar_iniciales(self):
+        nombres = self.ids.nombres_field.text.strip()
+        apellidos = self.ids.apellidos_field.text.strip()
+        self.ids.iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
 
     def ingresar(self):
         nombres = self.ids.nombres_field.text.strip()

@@ -241,6 +241,21 @@ Builder.load_string('''
                 md_bg_color: 0.8, 0.1, 0.1, 1
                 on_release: root.confirmar_borrar_bd()
 
+            # ── TEMPORAL: solo para probar la pantalla de bienvenida ──
+            MDLabel:
+                text: "Solo para pruebas"
+                font_style: "Caption"
+                halign: "center"
+                adaptive_height: True
+                theme_text_color: "Secondary"
+
+            MDFlatButton:
+                text: "CERRAR SESIÓN"
+                theme_text_color: "Custom"
+                text_color: 0.8, 0.1, 0.1, 1
+                pos_hint: {"center_x": .5}
+                on_release: root.cerrar_sesion()
+
             MDFlatButton:
                 text: "VOLVER"
                 pos_hint: {"center_x": .5}
@@ -664,6 +679,38 @@ class PerfilScreen(MDScreen):
             self._mostrar('Error', f'No se pudo importar el backup: {e}')
             return
         self._mostrar('Backup importado', 'Cierra y vuelve a abrir la app para ver los datos importados.')
+
+    def cerrar_sesion(self):
+        # TEMPORAL: solo para poder ver/probar la pantalla de bienvenida
+        # (login_screen.py) sin desinstalar la app. Quitar este botón (y
+        # este método) cuando ya no haga falta probarla.
+        dialog = MDDialog(
+            title='¿Cerrar sesión?',
+            text=(
+                'Volverás a la pantalla de bienvenida. Tus reuniones NO se '
+                'borran, solo tendrás que volver a ingresar tu nombre.'
+            ),
+            buttons=[
+                MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss()),
+                MDRaisedButton(
+                    text='CERRAR SESIÓN',
+                    md_bg_color=(0.8, 0.1, 0.1, 1),
+                    on_release=lambda x: [dialog.dismiss(), self._hacer_logout()],
+                ),
+            ],
+        )
+        dialog.open()
+
+    def _hacer_logout(self):
+        config = cargar()
+        config['registrado'] = False
+        guardar(config)
+        app = App.get_running_app()
+        app.go_to('login')
+        bar = app.root.ids.bottom_bar
+        bar.opacity = 0
+        bar.size_hint_y = None
+        bar.height = 0
 
     def confirmar_borrar_bd(self):
         dialog = MDDialog(

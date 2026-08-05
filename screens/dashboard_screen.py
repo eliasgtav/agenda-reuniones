@@ -36,14 +36,31 @@ Builder.load_string('''
                     size_hint: None, None
                     size: '64dp', '64dp'
                     radius: [dp(32)]
-                    md_bg_color: 1, 1, 1, 1
+                    md_bg_color: app.theme_cls.primary_color
 
-                    Image:
-                        id: avatar_img
-                        source: ""
-                        allow_stretch: True
-                        keep_ratio: False
+                    FloatLayout:
                         size_hint: 1, 1
+
+                        Image:
+                            id: avatar_img
+                            source: ""
+                            allow_stretch: True
+                            keep_ratio: False
+                            size_hint: 1, 1
+                            pos_hint: {"x": 0, "y": 0}
+
+                        MDLabel:
+                            id: avatar_iniciales_lbl
+                            text: ""
+                            font_style: "H6"
+                            bold: False
+                            halign: "center"
+                            valign: "middle"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            size_hint: 1, 1
+                            pos_hint: {"x": 0, "y": 0}
+                            text_size: self.size
 
                 MDBoxLayout:
                     orientation: 'vertical'
@@ -262,7 +279,11 @@ class DashboardScreen(MDScreen):
         # Sin foto, Image(source='') igual pinta un rectángulo blanco sólido
         # (Kivy dibuja el Rectangle del canvas del Image con el Color blanco
         # por defecto cuando no hay texture) encima del MDCard circular --
-        # se ve como un cuadrado blanco tapando el círculo gris de fondo.
-        # Ocultando el Image cuando no hay foto real, se ve el MDCard
-        # (ya circular por su radius) sin nada encima.
+        # se ve como un cuadrado blanco tapando el círculo de fondo. Se
+        # oculta el Image cuando no hay foto real y en su lugar se muestran
+        # las iniciales, mismo patrón que perfil_screen.py.
         self.ids.avatar_img.opacity = 1 if existe else 0
+        self.ids.avatar_iniciales_lbl.opacity = 0 if existe else 1
+        nombres = config.get('nombres', '')
+        apellidos = config.get('apellidos', '')
+        self.ids.avatar_iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
