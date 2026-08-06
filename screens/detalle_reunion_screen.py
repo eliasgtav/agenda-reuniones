@@ -300,7 +300,7 @@ Builder.load_string('''
 
             CampoAcuerdosNumerados:
                 id: conclusion_field
-                hint_text: "Escribe cada acuerdo y presiona Enter para el siguiente..."
+                hint_text: "Un acuerdo por línea (Enter = siguiente)"
                 mode: "rectangle"
                 multiline: True
                 size_hint_y: None
@@ -1034,7 +1034,7 @@ class DetalleReunionScreen(MDScreen):
         self._prioridad_nuevo_acuerdo = acuerdo.get('prioridad', 'media') if acuerdo else 'media'
 
         campo_texto = CampoOraciones(
-            hint_text='Descripción del acuerdo (uno por línea si son varios)',
+            hint_text='Descripción del acuerdo (uno por línea)',
             mode='rectangle', multiline=True, size_hint_y=None, height=dp(90),
         )
         lbl_voz_texto = MDLabel(
@@ -1080,11 +1080,11 @@ class DetalleReunionScreen(MDScreen):
         btn_borrar_resp.bind(
             on_press=lambda _: campo_resp.delete_selection() if campo_resp.selection_text else None
         )
-        campo_plazo = TF(hint_text='Plazo (DD/MM/AAAA)', mode='rectangle', size_hint_x=.5)
+        campo_plazo = TF(hint_text='Plazo', mode='rectangle', size_hint_x=.5)
         campo_plazo.bind(on_focus=lambda inst, val: self._abrir_cal_acuerdo(inst, campo_plazo) if val else None)
         btn_cal_plazo = MDIconButton(icon='calendar', size_hint_x=None, width=dp(40))
         btn_cal_plazo.bind(on_release=lambda _: self._abrir_cal_acuerdo(None, campo_plazo))
-        campo_plazo_hora = TF(hint_text='Hora (opcional)', mode='rectangle', size_hint_x=.4)
+        campo_plazo_hora = TF(hint_text='Hora', mode='rectangle', size_hint_x=.4)
         campo_plazo_hora.bind(on_focus=lambda inst, val: self._abrir_hora_acuerdo(inst, campo_plazo_hora) if val else None)
         btn_reloj_plazo = MDIconButton(icon='clock-outline', size_hint_x=None, width=dp(40))
         btn_reloj_plazo.bind(on_release=lambda _: self._abrir_hora_acuerdo(None, campo_plazo_hora))

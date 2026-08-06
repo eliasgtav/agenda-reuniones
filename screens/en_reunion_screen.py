@@ -98,7 +98,7 @@ Builder.load_string('''
         # Campo de entrada
         CampoOrtografico:
             id: entrada_field
-            hint_text: "Escribe el acuerdo con lápiz, teclado o voz..."
+            hint_text: "Escribe aquí con lápiz, teclado o voz..."
             mode: "rectangle"
             multiline: True
             size_hint_y: None
