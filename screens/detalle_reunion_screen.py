@@ -11,18 +11,37 @@ from kivy.metrics import dp
 from kivy.utils import platform
 from kivy.core.audio import SoundLoader
 from kivy.core.window import Window
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.properties import AliasProperty
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.card import MDCard
-from kivymd.uix.label import MDLabel
+from kivymd.uix.label import MDLabel, MDIcon
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
+from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.selectioncontrol import MDCheckbox
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
-from utils.widgets import CampoOrtografico, CampoOraciones, CampoAcuerdosNumerados
+from utils.widgets import CampoMayusculas, CampoOraciones, CampoAcuerdosNumerados
 from utils.voz import DictadoVoz
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
 from utils.fechas import fecha_larga
+
+
+class IconoAccionCompacto(ButtonBehavior, MDIcon):
+    """Icono chico para filas de hint (MDIconButton fuerza 48dp, ver memoria).
+
+    Expone `icon_color` (alias de `text_color`) porque DictadoVoz espera
+    esa propiedad, propia de MDIconButton, para parpadear en rojo al grabar.
+    """
+
+    def _get_icon_color(self):
+        return self.text_color
+
+    def _set_icon_color(self, value):
+        self.text_color = value
+
+    icon_color = AliasProperty(_get_icon_color, _set_icon_color, bind=['text_color'])
 
 Builder.load_string('''
 <DetalleReunionScreen>:
@@ -114,12 +133,11 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: nuevo_participante
                     hint_text: "Agregar participante"
                     mode: "rectangle"
                     size_hint_x: 1
-                    on_text: self.text = self.text.upper()
 
                 MDBoxLayout:
                     adaptive_size: True
@@ -162,7 +180,7 @@ Builder.load_string('''
                 spacing: '8dp'
                 adaptive_height: True
                 radius: [10]
-                md_bg_color: 0.13, 0.40, 0.75, 0.07
+                md_bg_color: 1, 1, 1, 1
 
                 MDBoxLayout:
                     adaptive_height: True
@@ -412,7 +430,7 @@ Builder.load_string('''
                 spacing: '10dp'
                 adaptive_height: True
                 radius: [10]
-                md_bg_color: 0.40, 0.23, 0.72, 0.08
+                md_bg_color: 1, 1, 1, 1
 
                 MDLabel:
                     text: "Reprogramar reunión"
@@ -1039,28 +1057,34 @@ class DetalleReunionScreen(MDScreen):
             mode='rectangle', multiline=True, size_hint_y=None, height=dp(90),
         )
         lbl_voz_texto = MDLabel(
-            text='', font_style='Caption', halign='center', adaptive_height=True,
+            text='', font_style='Caption', halign='center',
+            size_hint_y=None, height=dp(16),
             theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
         )
-        btn_mic_texto = MDIconButton(
-            icon='microphone', theme_icon_color='Custom',
-            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        btn_mic_texto = IconoAccionCompacto(
+            icon='microphone', theme_text_color='Custom',
+            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
         )
-        btn_borrar_texto = MDIconButton(icon='eraser', size_hint_x=None, width=dp(36))
+        btn_borrar_texto = IconoAccionCompacto(
+            icon='eraser', size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
+        )
         dictado_texto = DictadoVoz(campo=campo_texto, boton_mic=btn_mic_texto, lbl_estado=lbl_voz_texto)
         btn_mic_texto.bind(on_release=lambda _: dictado_texto.toggle())
         btn_borrar_texto.bind(
             on_press=lambda _: campo_texto.delete_selection() if campo_texto.selection_text else None
         )
-        btn_traer_texto = MDIconButton(
-            icon='database-import-outline', theme_icon_color='Custom',
-            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        btn_traer_texto = IconoAccionCompacto(
+            icon='database-import-outline', theme_text_color='Custom',
+            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
         )
         btn_traer_texto.bind(on_release=lambda _: self._abrir_menu_traer_acuerdo(btn_traer_texto, campo_texto))
         fila_texto_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
         fila_texto_iconos.add_widget(MDLabel(
             text='Descripción del acuerdo', font_style='Caption', adaptive_height=True,
-            theme_text_color='Secondary',
+            theme_text_color='Secondary', pos_hint={'center_y': 0.5},
         ))
         fila_texto_iconos.add_widget(btn_mic_texto)
         fila_texto_iconos.add_widget(btn_borrar_texto)
@@ -1068,14 +1092,19 @@ class DetalleReunionScreen(MDScreen):
 
         campo_resp = CampoOraciones(hint_text='Responsable (opcional)', mode='rectangle')
         lbl_voz_resp = MDLabel(
-            text='', font_style='Caption', halign='center', adaptive_height=True,
+            text='', font_style='Caption', halign='center',
+            size_hint_y=None, height=dp(16),
             theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
         )
-        btn_mic_resp = MDIconButton(
-            icon='microphone', theme_icon_color='Custom',
-            icon_color=(0.13, 0.40, 0.75, 1), size_hint_x=None, width=dp(36),
+        btn_mic_resp = IconoAccionCompacto(
+            icon='microphone', theme_text_color='Custom',
+            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
         )
-        btn_borrar_resp = MDIconButton(icon='eraser', size_hint_x=None, width=dp(36))
+        btn_borrar_resp = IconoAccionCompacto(
+            icon='eraser', size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
+        )
         dictado_resp = DictadoVoz(campo=campo_resp, boton_mic=btn_mic_resp, lbl_estado=lbl_voz_resp)
         btn_mic_resp.bind(on_release=lambda _: dictado_resp.toggle())
         btn_borrar_resp.bind(
@@ -1084,7 +1113,7 @@ class DetalleReunionScreen(MDScreen):
         fila_resp_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
         fila_resp_iconos.add_widget(MDLabel(
             text='Responsable', font_style='Caption', adaptive_height=True,
-            theme_text_color='Secondary',
+            theme_text_color='Secondary', pos_hint={'center_y': 0.5},
         ))
         fila_resp_iconos.add_widget(btn_mic_resp)
         fila_resp_iconos.add_widget(btn_borrar_resp)
@@ -1110,7 +1139,10 @@ class DetalleReunionScreen(MDScreen):
                 if menu_holder:
                     menu_holder[0].dismiss()
 
-            btn_resp = MDIconButton(icon='account-arrow-down', size_hint_x=None, width=dp(36))
+            btn_resp = IconoAccionCompacto(
+                icon='account-arrow-down', size_hint=(None, None), size=(dp(24), dp(24)),
+                pos_hint={'center_y': 0.5},
+            )
             menu_items = [
                 {'text': nombre, 'on_release': (lambda n=nombre: _elegir_responsable(n))}
                 for nombre in participantes
@@ -1126,7 +1158,7 @@ class DetalleReunionScreen(MDScreen):
             fila_prioridad.clear_widgets()
             fila_prioridad.add_widget(MDLabel(
                 text='Prioridad:', font_style='Caption', adaptive_height=True,
-                size_hint_x=None, width=dp(56),
+                size_hint_x=None, width=dp(56), pos_hint={'center_y': 0.5},
             ))
             for clave, etiqueta, color in PRIORIDADES:
                 seleccionado = clave == self._prioridad_nuevo_acuerdo
@@ -1185,6 +1217,14 @@ class DetalleReunionScreen(MDScreen):
             ],
         )
         Window.unbind(on_resize=self._dlg_acuerdo.update_width)
+        # MDDialog calcula el espacio para el titulo (_spacer_top) a partir
+        # de content_cls.height una sola vez, en el primer frame tras crear
+        # el dialogo — antes de que nuestras filas terminen de resolver su
+        # altura real. Si ese calculo se queda corto, el titulo termina
+        # superpuesto con la primera fila. Nos re-suscribimos a los cambios
+        # de altura del contenido para que el dialogo se recalcule solo
+        # cada vez que haga falta.
+        contenido.bind(height=self._dlg_acuerdo.update_height)
         self._dlg_acuerdo.open()
 
     def _abrir_cal_acuerdo(self, instance, campo):

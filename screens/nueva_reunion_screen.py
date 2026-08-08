@@ -12,7 +12,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoMayusculas
 
 
 class BotonQuitarParticipante(ButtonBehavior, MDIcon):
@@ -54,12 +54,11 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: asunto_field
                     hint_text: "Asunto de la reunión *"
                     mode: "rectangle"
                     font_size: '15sp'
-                    on_text: self.text = self.text.upper()
 
                 MDBoxLayout:
                     adaptive_size: True
@@ -120,12 +119,11 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '8dp'
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: lugar_field
                     hint_text: "Lugar"
                     mode: "rectangle"
                     font_size: '15sp'
-                    on_text: self.text = self.text.upper()
 
                 MDBoxLayout:
                     adaptive_size: True
@@ -182,13 +180,12 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '4dp'
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: nuevo_participante
                     hint_text: "Nombre del participante"
                     mode: "rectangle"
                     font_size: '15sp'
                     size_hint_x: 1
-                    on_text: self.text = self.text.upper()
 
                 MDBoxLayout:
                     adaptive_size: True

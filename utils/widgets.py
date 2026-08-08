@@ -53,6 +53,19 @@ class CampoOrtografico(MDTextField):
         return consumido
 
 
+class CampoMayusculas(CampoOrtografico):
+    """CampoOrtografico que convierte a mayúsculas todo lo que se escribe,
+    implementado sobre insert_text (no reasignando self.text a mano: eso
+    dispara internamente self.cursor = fin-del-texto en CADA cambio, lo
+    que descoloca el reemplazo de sugerencias del teclado nativo -- ver
+    memoria project_agenda_bug_ontext_reentrancy)."""
+
+    def insert_text(self, substring, from_undo=False):
+        if substring and not from_undo:
+            substring = substring.upper()
+        return super().insert_text(substring, from_undo=from_undo)
+
+
 class CampoOraciones(CampoOrtografico):
     """CampoOrtografico que ademas pone en mayúscula la primera letra de
     cada oración (inicio del texto, o tras '.', '!', '?' o un salto de

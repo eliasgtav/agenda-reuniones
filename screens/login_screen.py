@@ -6,7 +6,7 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoMayusculas
 
 Builder.load_string('''
 <LoginScreen>:
@@ -64,21 +64,21 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '10dp'
 
-            CampoOrtografico:
+            CampoMayusculas:
                 id: nombres_field
                 hint_text: "Nombres *"
                 mode: "rectangle"
                 size_hint_x: 0.75
                 pos_hint: {"center_x": .5}
-                on_text: self.text = self.text.upper(); root._actualizar_iniciales()
+                on_text: root._actualizar_iniciales()
 
-            CampoOrtografico:
+            CampoMayusculas:
                 id: apellidos_field
                 hint_text: "Apellidos *"
                 mode: "rectangle"
                 size_hint_x: 0.75
                 pos_hint: {"center_x": .5}
-                on_text: self.text = self.text.upper(); root._actualizar_iniciales()
+                on_text: root._actualizar_iniciales()
 
             MDBoxLayout:
                 size_hint_y: None

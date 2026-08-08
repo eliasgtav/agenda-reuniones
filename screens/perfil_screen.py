@@ -17,7 +17,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
-from utils.widgets import CampoOrtografico, CampoOraciones
+from utils.widgets import CampoMayusculas, CampoOraciones
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -85,21 +85,19 @@ Builder.load_string('''
                 adaptive_height: True
                 spacing: '10dp'
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: nombres_field
                     hint_text: "Nombres *"
                     mode: "rectangle"
                     size_hint_x: 0.75
                     pos_hint: {"center_x": .5}
-                    on_text: self.text = self.text.upper()
 
-                CampoOrtografico:
+                CampoMayusculas:
                     id: apellidos_field
                     hint_text: "Apellidos *"
                     mode: "rectangle"
                     size_hint_x: 0.75
                     pos_hint: {"center_x": .5}
-                    on_text: self.text = self.text.upper()
 
                 MDRaisedButton:
                     text: "CAMBIAR FOTO"
