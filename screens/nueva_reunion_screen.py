@@ -39,26 +39,30 @@ Builder.load_string('''
                     font_size: '15sp'
                     on_text: self.text = self.text.upper()
 
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('asunto_field')
+                MDBoxLayout:
+                    adaptive_size: True
+                    spacing: '0dp'
 
-                MDIconButton:
-                    id: asunto_mic
-                    icon: "microphone"
-                    size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('asunto_field', 'asunto_mic')
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_release: root.enfocar('asunto_field')
 
-                MDIconButton:
-                    icon: "eraser"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_press: root.borrar_seleccion('asunto_field')
+                    MDIconButton:
+                        id: asunto_mic
+                        icon: "microphone"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        theme_icon_color: "Custom"
+                        icon_color: 0.13, 0.40, 0.75, 1
+                        on_release: root.toggle_voz('asunto_field', 'asunto_mic')
+
+                    MDIconButton:
+                        icon: "eraser"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_press: root.borrar_seleccion('asunto_field')
 
             MDBoxLayout:
                 adaptive_height: True
@@ -101,26 +105,30 @@ Builder.load_string('''
                     font_size: '15sp'
                     on_text: self.text = self.text.upper()
 
-                MDIconButton:
-                    icon: "pencil"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_release: root.enfocar('lugar_field')
+                MDBoxLayout:
+                    adaptive_size: True
+                    spacing: '0dp'
 
-                MDIconButton:
-                    id: lugar_mic
-                    icon: "microphone"
-                    size_hint_x: None
-                    width: '36dp'
-                    theme_icon_color: "Custom"
-                    icon_color: 0.13, 0.40, 0.75, 1
-                    on_release: root.toggle_voz('lugar_field', 'lugar_mic')
+                    MDIconButton:
+                        icon: "pencil"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_release: root.enfocar('lugar_field')
 
-                MDIconButton:
-                    icon: "eraser"
-                    size_hint_x: None
-                    width: '36dp'
-                    on_press: root.borrar_seleccion('lugar_field')
+                    MDIconButton:
+                        id: lugar_mic
+                        icon: "microphone"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        theme_icon_color: "Custom"
+                        icon_color: 0.13, 0.40, 0.75, 1
+                        on_release: root.toggle_voz('lugar_field', 'lugar_mic')
+
+                    MDIconButton:
+                        icon: "eraser"
+                        size_hint: None, None
+                        size: '32dp', '32dp'
+                        on_press: root.borrar_seleccion('lugar_field')
 
             MDLabel:
                 text: "Modalidad"
@@ -150,7 +158,7 @@ Builder.load_string('''
 
             MDBoxLayout:
                 adaptive_height: True
-                spacing: '8dp'
+                spacing: '4dp'
 
                 CampoOrtografico:
                     id: nuevo_participante
@@ -168,7 +176,7 @@ Builder.load_string('''
                         id: participante_mic
                         icon: "microphone"
                         size_hint: None, None
-                        size: '32dp', '32dp'
+                        size: '28dp', '28dp'
                         theme_icon_color: "Custom"
                         icon_color: 0.13, 0.40, 0.75, 1
                         on_release: root.toggle_voz('nuevo_participante', 'participante_mic')
@@ -176,19 +184,19 @@ Builder.load_string('''
                     MDIconButton:
                         icon: "eraser"
                         size_hint: None, None
-                        size: '32dp', '32dp'
+                        size: '28dp', '28dp'
                         on_press: root.borrar_seleccion('nuevo_participante')
 
                     MDIconButton:
                         icon: "account-plus"
                         size_hint: None, None
-                        size: '32dp', '32dp'
+                        size: '28dp', '28dp'
                         on_release: root.agregar_participante_ui()
 
                     MDIconButton:
                         icon: "contacts"
                         size_hint: None, None
-                        size: '32dp', '32dp'
+                        size: '28dp', '28dp'
                         on_release: root.elegir_contacto()
 
             MDBoxLayout:

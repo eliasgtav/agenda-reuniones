@@ -10,6 +10,7 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.utils import platform
 from kivy.core.audio import SoundLoader
+from kivy.core.window import Window
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
@@ -203,7 +204,7 @@ Builder.load_string('''
 
                 CampoOraciones:
                     id: trabajo_field
-                    hint_text: "Redacta aquí con lápiz, teclado o voz..."
+                    hint_text: "Redacta aquí con teclado o voz..."
                     mode: "rectangle"
                     multiline: True
                     size_hint_y: None
@@ -252,7 +253,7 @@ Builder.load_string('''
 
             CampoOraciones:
                 id: notas_field
-                hint_text: "Escribe las notas con lápiz o teclado..."
+                hint_text: "Redacta aquí con teclado o voz..."
                 mode: "rectangle"
                 multiline: True
                 size_hint_y: None
@@ -300,7 +301,7 @@ Builder.load_string('''
 
             CampoAcuerdosNumerados:
                 id: conclusion_field
-                hint_text: "Un acuerdo por línea (Enter = siguiente)"
+                hint_text: "Redacta un acuerdo por línea y Enter"
                 mode: "rectangle"
                 multiline: True
                 size_hint_y: None
@@ -1080,6 +1081,13 @@ class DetalleReunionScreen(MDScreen):
         btn_borrar_resp.bind(
             on_press=lambda _: campo_resp.delete_selection() if campo_resp.selection_text else None
         )
+        fila_resp_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+        fila_resp_iconos.add_widget(MDLabel(
+            text='Responsable', font_style='Caption', adaptive_height=True,
+            theme_text_color='Secondary',
+        ))
+        fila_resp_iconos.add_widget(btn_mic_resp)
+        fila_resp_iconos.add_widget(btn_borrar_resp)
         campo_plazo = TF(hint_text='Plazo', mode='rectangle', size_hint_x=.5)
         campo_plazo.bind(on_focus=lambda inst, val: self._abrir_cal_acuerdo(inst, campo_plazo) if val else None)
         btn_cal_plazo = MDIconButton(icon='calendar', size_hint_x=None, width=dp(40))
@@ -1094,10 +1102,6 @@ class DetalleReunionScreen(MDScreen):
         fila_plazo.add_widget(campo_plazo_hora)
         fila_plazo.add_widget(btn_reloj_plazo)
 
-        fila_resp = MDBoxLayout(adaptive_height=True, spacing=dp(4))
-        fila_resp.add_widget(campo_resp)
-        fila_resp.add_widget(btn_mic_resp)
-        fila_resp.add_widget(btn_borrar_resp)
         if participantes:
             menu_holder = []
 
@@ -1106,7 +1110,7 @@ class DetalleReunionScreen(MDScreen):
                 if menu_holder:
                     menu_holder[0].dismiss()
 
-            btn_resp = MDIconButton(icon='account-arrow-down', size_hint_x=None, width=dp(40))
+            btn_resp = MDIconButton(icon='account-arrow-down', size_hint_x=None, width=dp(36))
             menu_items = [
                 {'text': nombre, 'on_release': (lambda n=nombre: _elegir_responsable(n))}
                 for nombre in participantes
@@ -1114,22 +1118,22 @@ class DetalleReunionScreen(MDScreen):
             menu_resp = MDDropdownMenu(caller=btn_resp, items=menu_items, width_mult=4)
             menu_holder.append(menu_resp)
             btn_resp.bind(on_release=lambda _: menu_resp.open())
-            fila_resp.add_widget(btn_resp)
+            fila_resp_iconos.add_widget(btn_resp)
 
-        fila_prioridad = MDBoxLayout(adaptive_height=True, spacing=dp(6))
+        fila_prioridad = MDBoxLayout(adaptive_height=True, spacing=dp(4))
 
         def _refrescar_prioridad(*_a):
             fila_prioridad.clear_widgets()
             fila_prioridad.add_widget(MDLabel(
                 text='Prioridad:', font_style='Caption', adaptive_height=True,
-                size_hint_x=None, width=dp(64),
+                size_hint_x=None, width=dp(56),
             ))
             for clave, etiqueta, color in PRIORIDADES:
                 seleccionado = clave == self._prioridad_nuevo_acuerdo
                 btn = MDRaisedButton(
                     text=etiqueta,
                     size_hint_x=None,
-                    width=dp(72),
+                    width=dp(64),
                     md_bg_color=color if seleccionado else (0.85, 0.85, 0.85, 1),
                 )
                 btn.bind(on_release=lambda _, c=clave: (self._set_prioridad_nuevo_acuerdo(c), _refrescar_prioridad()))
@@ -1151,16 +1155,25 @@ class DetalleReunionScreen(MDScreen):
         contenido.add_widget(fila_texto_iconos)
         contenido.add_widget(campo_texto)
         contenido.add_widget(lbl_voz_texto)
-        contenido.add_widget(fila_resp)
+        contenido.add_widget(fila_resp_iconos)
+        contenido.add_widget(campo_resp)
         contenido.add_widget(lbl_voz_resp)
         contenido.add_widget(fila_prioridad)
         contenido.add_widget(fila_plazo)
 
         acuerdo_id = acuerdo['id'] if acuerdo else None
+        # MDDialog fija su ancho a un máximo de 280dp en móvil (ver
+        # kivymd/uix/dialog/dialog.py::update_width) — muy poco para el
+        # semáforo de prioridad y el texto de los hints. Se fuerza un ancho
+        # mayor y se desengancha update_width para que no lo vuelva a achicar
+        # si el teclado nativo dispara un resize de la ventana.
+        ancho_dialogo = min(dp(400), Window.width - dp(16))
         self._dlg_acuerdo = MDDialog(
             title=('Editar acuerdo' if acuerdo else 'Nuevo acuerdo con plazo'),
             type='custom',
             content_cls=contenido,
+            size_hint=(None, None),
+            width=ancho_dialogo,
             buttons=[
                 MDFlatButton(text='CANCELAR', on_release=lambda x: self._dlg_acuerdo.dismiss()),
                 MDRaisedButton(
@@ -1171,6 +1184,7 @@ class DetalleReunionScreen(MDScreen):
                 ),
             ],
         )
+        Window.unbind(on_resize=self._dlg_acuerdo.update_width)
         self._dlg_acuerdo.open()
 
     def _abrir_cal_acuerdo(self, instance, campo):
