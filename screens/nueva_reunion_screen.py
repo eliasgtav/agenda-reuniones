@@ -2,18 +2,40 @@
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.metrics import dp
+from kivy.factory import Factory
+from kivy.uix.behaviors import ButtonBehavior
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.label import MDLabel
+from kivymd.uix.label import MDLabel, MDIcon
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
 from utils.widgets import CampoOrtografico
 
+
+class BotonQuitarParticipante(ButtonBehavior, MDIcon):
+    """Icono 'x' compacto: a diferencia de MDIconButton, no fuerza 48dp."""
+
+
 Builder.load_string('''
+<ChipParticipante@MDBoxLayout>:
+    adaptive_height: True
+    spacing: '4dp'
+
+    MDLabel:
+        id: lbl_nombre
+        adaptive_height: True
+        font_style: 'Body2'
+        valign: 'center'
+
+    BotonQuitarParticipante:
+        id: btn_quitar
+        icon: 'delete'
+        size_hint: None, None
+        size: '20dp', '20dp'
+
 <NuevaReunionScreen>:
     MDScrollView:
         id: scroll_view
@@ -193,17 +215,12 @@ Builder.load_string('''
                         size: '28dp', '28dp'
                         on_release: root.agregar_participante_ui()
 
-                    MDIconButton:
-                        icon: "contacts"
-                        size_hint: None, None
-                        size: '28dp', '28dp'
-                        on_release: root.elegir_contacto()
-
             MDBoxLayout:
                 id: participantes_list
                 orientation: 'vertical'
                 adaptive_height: True
-                spacing: '4dp'
+                spacing: '0dp'
+                padding: '12dp', '0dp', '0dp', '0dp'
 
             MDLabel:
                 text: "Alertas de recordatorio"
@@ -270,15 +287,9 @@ Builder.load_string('''
 
 
 def _chip_participante(nombre, on_remove):
-    row = MDBoxLayout(adaptive_height=True, spacing=dp(4))
-    row.add_widget(MDLabel(
-        text=f'• {nombre}',
-        adaptive_height=True,
-        font_style='Body2',
-    ))
-    btn = MDIconButton(icon='close', size_hint_x=None, width=dp(36))
-    btn.bind(on_release=on_remove)
-    row.add_widget(btn)
+    row = Factory.ChipParticipante()
+    row.ids.lbl_nombre.text = f'• {nombre}'
+    row.ids.btn_quitar.bind(on_release=on_remove)
     return row
 
 
@@ -399,16 +410,6 @@ class NuevaReunionScreen(MDScreen):
         if nombre and nombre not in self._participantes:
             self._participantes.append(nombre)
             self.ids.nuevo_participante.text = ''
-            self._refrescar_participantes()
-
-    def elegir_contacto(self):
-        from utils.contactos import abrir_selector
-        abrir_selector(self._contacto_elegido, self._mostrar_error)
-
-    def _contacto_elegido(self, nombre):
-        nombre = nombre.strip().upper()
-        if nombre and nombre not in self._participantes:
-            self._participantes.append(nombre)
             self._refrescar_participantes()
 
     def _refrescar_participantes(self):
