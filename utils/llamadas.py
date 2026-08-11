@@ -13,19 +13,40 @@ _ultimo_estado = None
 _mensaje_actual = ''
 
 
+def _log(mensaje):
+    """Registro de depuración temporal (ver [[project_agenda_build_android]]):
+    todo lo demás en este módulo se traga las excepciones para no romper la
+    grabación si algo de esto falla, así que sin esto es imposible saber por
+    qué no llegó un SMS. Escribe en app_storage_path()/llamadas_debug.log."""
+    try:
+        import traceback
+        from datetime import datetime
+        from android.storage import app_storage_path
+        import os
+        ruta = os.path.join(app_storage_path(), 'llamadas_debug.log')
+        with open(ruta, 'a', encoding='utf-8') as f:
+            f.write(f'[{datetime.now().isoformat()}] {mensaje}\n')
+    except Exception:
+        pass
+
+
 def iniciar(mensaje):
     """Empieza a escuchar llamadas entrantes. No hace nada fuera de Android."""
     global _mensaje_actual
     _mensaje_actual = mensaje
     if platform != 'android':
         return
+    _log(f'iniciar() llamado, mensaje={mensaje!r}')
     from android.permissions import check_permission, request_permissions, Permission
     permisos = [Permission.READ_PHONE_STATE, Permission.READ_CALL_LOG, Permission.SEND_SMS]
-    if all(check_permission(p) for p in permisos):
+    estado_permisos = {p: check_permission(p) for p in permisos}
+    _log(f'permisos actuales: {estado_permisos}')
+    if all(estado_permisos.values()):
         _iniciar_receiver()
         return
 
     def _en_respuesta(_permissions, resultados):
+        _log(f'respuesta de request_permissions: {list(zip(_permissions, resultados))}')
         if resultados and all(resultados):
             from kivy.clock import Clock
             Clock.schedule_once(lambda dt: _iniciar_receiver(), 0)
@@ -37,10 +58,11 @@ def detener():
     global _receiver, _ultimo_estado
     if platform != 'android' or _receiver is None:
         return
+    _log('detener()')
     try:
         _receiver.stop()
-    except Exception:
-        pass
+    except Exception as e:
+        _log(f'excepción al detener receiver: {e!r}')
     _receiver = None
     _ultimo_estado = None
 
@@ -48,17 +70,25 @@ def detener():
 def _iniciar_receiver():
     global _receiver, _ultimo_estado
     if _receiver is not None:
+        _log('_iniciar_receiver: ya había uno activo, se ignora')
         return
-    from android.broadcast import BroadcastReceiver
-    _ultimo_estado = None
-    _receiver = BroadcastReceiver(_on_broadcast, actions=['android.intent.action.PHONE_STATE'])
-    _receiver.start()
+    try:
+        from android.broadcast import BroadcastReceiver
+        _ultimo_estado = None
+        _receiver = BroadcastReceiver(_on_broadcast, actions=['android.intent.action.PHONE_STATE'])
+        _receiver.start()
+        _log('_iniciar_receiver: receiver registrado OK')
+    except Exception as e:
+        import traceback
+        _log(f'_iniciar_receiver: EXCEPCIÓN al registrar receiver: {e!r}\n{traceback.format_exc()}')
+        raise
 
 
 def _on_broadcast(_context, intent):
     global _ultimo_estado
     estado = intent.getStringExtra('state')
     numero = intent.getStringExtra('incoming_number')
+    _log(f'_on_broadcast: estado={estado!r} numero={numero!r} (anterior={_ultimo_estado!r})')
     # Solo al pasar A "RINGING" (no en cada broadcast repetido mientras
     # sigue sonando) para no mandar el SMS varias veces por la misma llamada.
     if estado == 'RINGING' and numero and _ultimo_estado != 'RINGING':
@@ -67,9 +97,12 @@ def _on_broadcast(_context, intent):
 
 
 def _enviar_sms(numero):
+    _log(f'_enviar_sms: intentando enviar a {numero!r}')
     try:
         from jnius import autoclass
         SmsManager = autoclass('android.telephony.SmsManager')
         SmsManager.getDefault().sendTextMessage(numero, None, _mensaje_actual, None, None)
-    except Exception:
-        pass
+        _log('_enviar_sms: sendTextMessage OK (sin excepción)')
+    except Exception as e:
+        import traceback
+        _log(f'_enviar_sms: EXCEPCIÓN: {e!r}\n{traceback.format_exc()}')
