@@ -10,6 +10,7 @@ from kivy.utils import platform
 
 _receiver = None
 _ultimo_estado = None
+_sms_enviado = False
 _mensaje_actual = ''
 
 
@@ -55,7 +56,7 @@ def iniciar(mensaje):
 
 
 def detener():
-    global _receiver, _ultimo_estado
+    global _receiver, _ultimo_estado, _sms_enviado
     if platform != 'android' or _receiver is None:
         return
     _log('detener()')
@@ -65,16 +66,18 @@ def detener():
         _log(f'excepción al detener receiver: {e!r}')
     _receiver = None
     _ultimo_estado = None
+    _sms_enviado = False
 
 
 def _iniciar_receiver():
-    global _receiver, _ultimo_estado
+    global _receiver, _ultimo_estado, _sms_enviado
     if _receiver is not None:
         _log('_iniciar_receiver: ya había uno activo, se ignora')
         return
     try:
         from android.broadcast import BroadcastReceiver
         _ultimo_estado = None
+        _sms_enviado = False
         _receiver = BroadcastReceiver(_on_broadcast, actions=['android.intent.action.PHONE_STATE'])
         _receiver.start()
         _log('_iniciar_receiver: receiver registrado OK')
@@ -85,14 +88,20 @@ def _iniciar_receiver():
 
 
 def _on_broadcast(_context, intent):
-    global _ultimo_estado
+    global _ultimo_estado, _sms_enviado
     estado = intent.getStringExtra('state')
     numero = intent.getStringExtra('incoming_number')
     _log(f'_on_broadcast: estado={estado!r} numero={numero!r} (anterior={_ultimo_estado!r})')
-    # Solo al pasar A "RINGING" (no en cada broadcast repetido mientras
-    # sigue sonando) para no mandar el SMS varias veces por la misma llamada.
-    if estado == 'RINGING' and numero and _ultimo_estado != 'RINGING':
-        _enviar_sms(numero)
+    # El timbrado dispara VARIOS broadcasts en RINGING seguidos -- el primero
+    # normalmente sin el número (llega en uno posterior) -- así que no alcanza
+    # con comparar contra el estado anterior para no repetir el SMS. Se usa
+    # una bandera aparte que se resetea al salir de RINGING (a IDLE/OFFHOOK).
+    if estado == 'RINGING':
+        if numero and not _sms_enviado:
+            _enviar_sms(numero)
+            _sms_enviado = True
+    else:
+        _sms_enviado = False
     _ultimo_estado = estado
 
 
