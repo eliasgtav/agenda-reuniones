@@ -1359,12 +1359,34 @@ class DetalleReunionScreen(MDScreen):
             self.ids.btn_grabar.text = 'DETENER GRABACIÓN'
             self.ids.btn_grabar.md_bg_color = (0.8, 0.1, 0.1, 1)
             from utils.config import cargar as cargar_config
-            from utils import llamadas
+            from utils import llamadas, silenciador
             mensaje = cargar_config().get('sms_auto_respuesta', '')
             if mensaje:
                 llamadas.iniciar(mensaje)
+            if silenciador.tiene_permiso():
+                silenciador.silenciar()
+            elif platform == 'android':
+                Clock.schedule_once(lambda dt: self._pedir_permiso_silencio(), 0)
         except Exception as e:
             self._mostrar_info('Grabación', f'No disponible: {e}')
+
+    def _pedir_permiso_silencio(self):
+        def _ir_a_configuracion(_x):
+            dialog.dismiss()
+            from utils import silenciador
+            silenciador.pedir_permiso()
+
+        dialog = MDDialog(
+            title='Silenciar llamadas al grabar',
+            text=('Para que una llamada entrante no timbre mientras grabas '
+                  'una reunión, Android pide un permiso especial ("Acceso a '
+                  'No Molestar"). ¿Quieres concederlo ahora?'),
+            buttons=[
+                MDFlatButton(text='AHORA NO', on_release=lambda x: dialog.dismiss()),
+                MDRaisedButton(text='IR A CONFIGURACIÓN', on_release=_ir_a_configuracion),
+            ],
+        )
+        dialog.open()
 
     def _detener_grabacion(self):
         global _grabando, _grabacion_path
@@ -1373,8 +1395,9 @@ class DetalleReunionScreen(MDScreen):
             audio.stop()
         except Exception:
             pass
-        from utils import llamadas
+        from utils import llamadas, silenciador
         llamadas.detener()
+        silenciador.restaurar()
         _grabando = False
         self.ids.btn_grabar.text = 'GRABAR REUNIÓN'
         self.ids.btn_grabar.md_bg_color = (0.13, 0.40, 0.75, 1)

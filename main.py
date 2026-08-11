@@ -241,6 +241,8 @@ MDBoxLayout:
             return root
 
         def on_start(self):
+            from utils import silenciador
+            silenciador.restaurar()
             from utils.config import cargar
             config = cargar()
             if not config.get('registrado'):
