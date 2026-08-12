@@ -1,15 +1,21 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
-"""Silencia el volumen del timbre de llamadas entrantes mientras se graba
-una reunión (para que no se escuche por encima de la grabación) y lo
-restaura al terminar. Solo toca el stream RING, no el modo No Molestar
-completo -- el resto de notificaciones del teléfono sigue sonando normal.
-Android exige el permiso especial "Acceso a No Molestar" para poder
-tocar el volumen/modo del timbre desde una app (desde Android 7), no hay
-forma de silenciarlo sin ese permiso.
+"""Silencia el timbre de llamadas entrantes (y el resto de notificaciones)
+mientras se graba una reunión, y restaura todo al terminar. Android exige
+el permiso especial "Acceso a No Molestar" para poder tocar el volumen/modo
+del timbre desde una app (desde Android 7), no hay forma de silenciarlo sin
+ese permiso.
 
-El volumen previo se guarda en el config en disco (no en una variable en
-memoria): si la app se cierra/crashea mientras está silenciado, el
-volumen quedaría mudo para siempre sin esto -- restaurar() se llama de
+Usa RINGER_MODE_SILENT (silencio total, sin vibrar) en vez de solo bajar
+el volumen del stream RING a 0 -- se probó esto último primero, pero
+Android convierte volumen-0 en modo vibrador automáticamente, y el motor
+de vibración se colaba como zumbido en la grabación. RINGER_MODE_SILENT sí
+frena la vibración, a costa de silenciar también otras notificaciones
+(WhatsApp, etc.) mientras se graba -- decisión explícita del usuario, que
+prefiere silencio total a que la vibración se escuche en la grabación.
+
+El volumen y modo previos se guardan en el config en disco (no en una
+variable en memoria): si la app se cierra/crashea mientras está
+silenciado, quedaría mudo para siempre sin esto -- restaurar() se llama de
 nuevo en el próximo arranque (main.py::on_start) y sí puede recuperarlo."""
 from kivy.utils import platform
 
@@ -73,9 +79,10 @@ def pedir_permiso():
 
 
 def silenciar():
-    """Guarda el volumen actual del timbre en el config y lo pone en 0. No
-    hace nada si falta el permiso (la llamada seguirá timbrando normal, sin
-    romper el resto de la grabación)."""
+    """Guarda el modo de timbre y volumen actuales en el config y pone el
+    teléfono en RINGER_MODE_SILENT (sin sonido ni vibración). No hace nada
+    si falta el permiso (la llamada seguirá timbrando normal, sin romper el
+    resto de la grabación)."""
     if platform != 'android' or not tiene_permiso():
         _log('silenciar(): sin permiso o no es Android, se ignora')
         return
@@ -83,31 +90,37 @@ def silenciar():
         from utils.config import cargar, guardar
         audio, AudioManager = _audio_manager()
         config = cargar()
+        modo_actual = audio.getRingerMode()
         volumen_actual = audio.getStreamVolume(AudioManager.STREAM_RING)
+        config['_ring_modo_respaldo'] = modo_actual
         config['_ring_volumen_respaldo'] = volumen_actual
         guardar(config)
-        audio.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
-        _log(f'silenciar(): OK, volumen anterior guardado={volumen_actual}')
+        audio.setRingerMode(AudioManager.RINGER_MODE_SILENT)
+        _log(f'silenciar(): OK, modo anterior={modo_actual} volumen anterior={volumen_actual}')
     except Exception as e:
         import traceback
         _log(f'silenciar(): EXCEPCIÓN: {e!r}\n{traceback.format_exc()}')
 
 
 def restaurar():
-    """Devuelve el timbre al volumen que tenía antes de grabar (si había
-    quedado uno guardado)."""
+    """Devuelve el timbre al modo y volumen que tenía antes de grabar (si
+    había quedado algo guardado)."""
     if platform != 'android':
         return
     try:
         from utils.config import cargar, guardar
         config = cargar()
+        modo = config.pop('_ring_modo_respaldo', None)
         volumen = config.pop('_ring_volumen_respaldo', None)
-        if volumen is None:
+        if modo is None and volumen is None:
             return
         guardar(config)
         audio, AudioManager = _audio_manager()
-        audio.setStreamVolume(AudioManager.STREAM_RING, volumen, 0)
-        _log(f'restaurar(): OK, volumen restaurado={volumen}')
+        if modo is not None:
+            audio.setRingerMode(modo)
+        if volumen is not None:
+            audio.setStreamVolume(AudioManager.STREAM_RING, volumen, 0)
+        _log(f'restaurar(): OK, modo restaurado={modo} volumen restaurado={volumen}')
     except Exception as e:
         import traceback
         _log(f'restaurar(): EXCEPCIÓN: {e!r}\n{traceback.format_exc()}')
