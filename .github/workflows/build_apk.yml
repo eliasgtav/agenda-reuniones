@@ -85,6 +85,14 @@ jobs:
 
       - name: Verificar firma real del APK compilado
         run: |
+          echo "=== Variables de entorno ANDROID_*/HOME (para ver si Gradle mira otro directorio) ==="
+          env | grep -Ei "^(ANDROID|HOME|GRADLE)" | sort
+          echo "=== Todos los debug.keystore en el filesystem (ruta + fecha de modificacion) ==="
+          find / -xdev -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
+          find /home -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
+          find /root -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
+          echo "=== Contenido de ~/.android (deberia tener solo nuestro debug.keystore) ==="
+          ls -la ~/.android 2>/dev/null || echo "~/.android no existe"
           APK=$(ls bin/*.apk | head -n1)
           echo "APK: $APK"
           APKSIGNER=$(find ~/.buildozer/android/platform/android-sdk/build-tools -name apksigner | sort -V | tail -n1)
