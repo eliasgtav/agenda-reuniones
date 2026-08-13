@@ -77,9 +77,25 @@ jobs:
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Agenda Debug, O=Elias Gaytan Alvino, C=MX"
           fi
+          echo "=== Fingerprint del keystore en ~/.android/debug.keystore ==="
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA256|SHA1|Valid from"
 
       - name: Compilar APK
         run: buildozer -v android debug
+
+      - name: Verificar firma real del APK compilado
+        run: |
+          APK=$(ls bin/*.apk | head -n1)
+          echo "APK: $APK"
+          APKSIGNER=$(find ~/.buildozer/android/platform/android-sdk/build-tools -name apksigner | sort -V | tail -n1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "WARN: no se encontro apksigner bajo android-sdk/build-tools"
+          else
+            echo "Usando apksigner: $APKSIGNER"
+            "$APKSIGNER" verify --print-certs "$APK" || true
+          fi
+          echo "=== Certificado real del APK via keytool -printcert (respaldo si apksigner no esta) ==="
+          unzip -p "$APK" META-INF/*.RSA META-INF/*.DSA META-INF/*.EC 2>/dev/null | keytool -printcert 2>/dev/null || echo "Sin firma v1/JAR visible (normal si es solo v2/v3) o unzip fallo."
 
       - name: Subir APK como artefacto
         uses: actions/upload-artifact@v4
