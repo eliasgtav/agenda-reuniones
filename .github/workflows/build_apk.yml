@@ -64,10 +64,18 @@ jobs:
 
       - name: Preparar keystore de debug fijo
         run: |
-          mkdir -p ~/.android
+          # Se copia a AMBAS ubicaciones posibles: las herramientas de Android
+          # (SDK cmdline-tools / AGP recientes) migraron el directorio de config
+          # de usuario de ~/.android a ~/.config/.android (convencion XDG), y
+          # segun que ubicacion lea Gradle en este runner puede generar SU PROPIO
+          # debug.keystore aleatorio ahi si la encuentra vacia -- eso causaba que
+          # la firma del APK cambiara entre builds pese a que ~/.android/debug.keystore
+          # si tenia el fijo (visto 2026-08-12/13, runs 31563033074 y 31665162742).
+          mkdir -p ~/.android ~/.config/.android
           if [ -f ci/debug.keystore ]; then
             echo "Usando keystore de debug ya committeado (firma estable entre builds)."
             cp ci/debug.keystore ~/.android/debug.keystore
+            cp ci/debug.keystore ~/.config/.android/debug.keystore
           else
             echo "No existe ci/debug.keystore todavia: generando uno nuevo."
             keytool -genkeypair -v \
@@ -76,9 +84,12 @@ jobs:
               -alias androiddebugkey \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Agenda Debug, O=Elias Gaytan Alvino, C=MX"
+            cp ~/.android/debug.keystore ~/.config/.android/debug.keystore
           fi
           echo "=== Fingerprint del keystore en ~/.android/debug.keystore ==="
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA256|SHA1|Valid from"
+          echo "=== Fingerprint del keystore en ~/.config/.android/debug.keystore (debe ser identico) ==="
+          keytool -list -v -keystore ~/.config/.android/debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA256|SHA1|Valid from"
 
       - name: Compilar APK
         run: buildozer -v android debug
@@ -88,11 +99,18 @@ jobs:
           echo "=== Variables de entorno ANDROID_*/HOME (para ver si Gradle mira otro directorio) ==="
           env | grep -Ei "^(ANDROID|HOME|GRADLE)" | sort
           echo "=== Todos los debug.keystore en el filesystem (ruta + fecha de modificacion) ==="
-          find / -xdev -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
-          find /home -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
-          find /root -name "debug.keystore" -exec ls -la {} \; 2>/dev/null
+          # || true en cada find: con "set -e" (shell por defecto de los steps de
+          # Actions), un find que topa con un directorio sin permisos (p.ej. /root
+          # como usuario "runner") devuelve exit != 0 y aborta el resto del step en
+          # silencio -- eso paso en el run 31665162742, cortando el diagnostico justo
+          # despues de listar los keystore, antes de llegar a apksigner/keytool.
+          find / -xdev -name "debug.keystore" -exec ls -la {} \; 2>/dev/null || true
+          find /home -name "debug.keystore" -exec ls -la {} \; 2>/dev/null || true
+          find /root -name "debug.keystore" -exec ls -la {} \; 2>/dev/null || true
           echo "=== Contenido de ~/.android (deberia tener solo nuestro debug.keystore) ==="
           ls -la ~/.android 2>/dev/null || echo "~/.android no existe"
+          echo "=== Contenido de ~/.config/.android (deberia tener solo nuestro debug.keystore) ==="
+          ls -la ~/.config/.android 2>/dev/null || echo "~/.config/.android no existe"
           APK=$(ls bin/*.apk | head -n1)
           echo "APK: $APK"
           APKSIGNER=$(find ~/.buildozer/android/platform/android-sdk/build-tools -name apksigner | sort -V | tail -n1)
