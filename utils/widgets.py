@@ -52,6 +52,40 @@ class CampoOrtografico(MDTextField):
                 self._select_word()
         return consumido
 
+    def keyboard_on_textinput(self, window, text):
+        # El teclado nativo (Gboard) muestra la palabra que se está
+        # escribiendo/autocorrigiendo como "composición" IME -- Kivy la va
+        # insertando de forma directa en window_on_textedit, fuera de
+        # insert_text. Cuando esa palabra se CONFIRMA (con espacio,
+        # puntuación, o al tocar una sugerencia), Android puede reenviar
+        # la palabra completa en el commit en vez de solo lo nuevo -- si
+        # no se borra primero el residuo de la composición ya insertada,
+        # queda duplicada ("holahola"). Bug real reportado por el
+        # usuario y reproducido con un script aislado: commitText('Hola ')
+        # sobre una composición 'hola' sin limpiar daba 'holaHola '.
+        self._limpiar_residuo_ime()
+        super().keyboard_on_textinput(window, text)
+        self._ime_composition = ''
+
+    def _limpiar_residuo_ime(self):
+        comp = self._ime_composition
+        cursor_comp = self._ime_cursor
+        if not comp or not cursor_comp:
+            return
+        pcc, pcr = cursor_comp
+        lines = self._lines
+        if pcr >= len(lines):
+            return
+        linea = lines[pcr]
+        if linea[pcc - len(comp):pcc] != comp:
+            return
+        ci = self.cursor_index()
+        nueva_linea = linea[:pcc - len(comp)] + linea[pcc:]
+        self._refresh_text_from_property(
+            "insert", *self._get_line_from_cursor(pcr, nueva_linea)
+        )
+        self.cursor = self.get_cursor_from_index(max(0, ci - len(comp)))
+
 
 class CampoMayusculas(CampoOrtografico):
     """CampoOrtografico que convierte a mayúsculas todo lo que se escribe,
