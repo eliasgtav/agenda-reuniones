@@ -34,6 +34,39 @@ def _log_teclado(mensaje):
         pass
 
 
+def _restart_input_android(_dt=None):
+    """Causa raíz confirmada con logging real en dispositivo (ver memoria
+    project_agenda_bug_teclado_duplicado): cuando la app borra texto del
+    lado de Kivy (retroceso, selección), nunca se lo avisa a la conexión
+    real de Android con el teclado -- Gboard sigue creyendo que el texto
+    viejo sigue ahí, y en el siguiente commit devuelve una mezcla del
+    resto que YA se había borrado más lo nuevo que se escribió (visto en
+    el log: campo con 'EL', Gboard mandó 'ias Gaytán eli' -- el resto de
+    'Gaytán' que ya no estaba, pegado con 'eli' recién tecleado). Forzar
+    InputMethodManager.restartInput() tira el estado interno viejo de
+    Gboard para que la próxima palabra se calcule contra el texto real."""
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        Context = autoclass('android.content.Context')
+        activity = PythonActivity.mActivity
+        vista = activity.getCurrentFocus() or activity.getWindow().getDecorView()
+        imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
+        imm.restartInput(vista)
+        _log_teclado(f'_restart_input_android OK vista={vista!r}')
+    except Exception as e:
+        _log_teclado(f'_restart_input_android EXCEPCION {e!r}')
+
+
+def _programar_restart_input():
+    # Debounced: una ráfaga de varios retrocesos seguidos (mantener
+    # presionado) solo debe disparar UN restart, justo después del último,
+    # no uno por cada tecla -- restartInput() es una operación pesada del
+    # lado de Android.
+    Clock.unschedule(_restart_input_android)
+    Clock.schedule_once(_restart_input_android, 0.05)
+
+
 class CampoOrtografico(MDTextField):
     """MDTextField que pide explícitamente input_type='text' (el default
     de Kivy 2.3 es 'null', que en Android corre el teclado en modo
@@ -213,6 +246,8 @@ class CampoOrtografico(MDTextField):
         cursor_antes = self.cursor
         seleccion = (self._selection_from, self._selection_to)
         resultado = super().delete_selection(from_undo=from_undo)
+        if self.text != texto_antes:
+            _programar_restart_input()
         _log_teclado(
             f'{self._id_log()} delete_selection from_undo={from_undo!r} '
             f'seleccion={seleccion!r} texto_antes={texto_antes!r} '
@@ -225,6 +260,8 @@ class CampoOrtografico(MDTextField):
         texto_antes = self.text
         cursor_antes = self.cursor
         resultado = super().do_backspace(from_undo=from_undo, mode=mode)
+        if self.text != texto_antes:
+            _programar_restart_input()
         _log_teclado(
             f'{self._id_log()} do_backspace from_undo={from_undo!r} '
             f'mode={mode!r} texto_antes={texto_antes!r} '
