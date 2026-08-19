@@ -10,6 +10,29 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivymd.uix.textfield import MDTextField
 
+# Instrumentación temporal para diagnosticar el bug real de duplicación de
+# texto con el teclado nativo en dispositivo (ver memoria
+# project_agenda_bug_teclado_duplicado): el primer fix (limpiar residuo IME
+# en keyboard_on_textinput) se basó en una simulación de escritorio que NO
+# reproduce el bug real -- hace falta ver la secuencia REAL de eventos que
+# manda Android/Gboard en este dispositivo. Poner en False una vez
+# diagnosticado (no dejar logueando cada tecla en producción).
+_DEBUG_TECLADO = True
+
+
+def _log_teclado(mensaje):
+    if not _DEBUG_TECLADO:
+        return
+    try:
+        from datetime import datetime
+        from android.storage import app_storage_path
+        import os
+        ruta = os.path.join(app_storage_path(), 'teclado_debug.log')
+        with open(ruta, 'a', encoding='utf-8') as f:
+            f.write(f'[{datetime.now().isoformat()}] {mensaje}\n')
+    except Exception:
+        pass
+
 
 class CampoOrtografico(MDTextField):
     """MDTextField que pide explícitamente input_type='text' (el default
@@ -26,6 +49,9 @@ class CampoOrtografico(MDTextField):
         self.keyboard_suggestions = True
         self._ultimo_toque_ts = 0
         self._ultimo_toque_pos = None
+
+    def _id_log(self):
+        return getattr(self, 'hint_text', '') or f'campo{id(self) % 10000}'
 
     def on_touch_down(self, touch):
         consumido = super().on_touch_down(touch)
@@ -52,6 +78,26 @@ class CampoOrtografico(MDTextField):
                 self._select_word()
         return consumido
 
+    def window_on_textedit(self, window, text):
+        # Kivy llama esto por cada evento de "composición" IME que manda
+        # Android (SDL2) mientras Gboard va sugiriendo/autocorrigiendo la
+        # palabra en curso, ANTES de que se confirme -- ver
+        # keyboard_on_textinput abajo. Instrumentado (sin tocar lógica)
+        # para ver la secuencia real de eventos en dispositivo.
+        _log_teclado(
+            f'{self._id_log()} window_on_textedit IN text={text!r} '
+            f'ime_comp_antes={self._ime_composition!r} '
+            f'ime_cursor_antes={self._ime_cursor!r} '
+            f'texto_antes={self.text!r} cursor_antes={self.cursor!r}'
+        )
+        super().window_on_textedit(window, text)
+        _log_teclado(
+            f'{self._id_log()} window_on_textedit OUT '
+            f'ime_comp_despues={self._ime_composition!r} '
+            f'ime_cursor_despues={self._ime_cursor!r} '
+            f'texto_despues={self.text!r} cursor_despues={self.cursor!r}'
+        )
+
     def keyboard_on_textinput(self, window, text):
         # El teclado nativo (Gboard) muestra la palabra que se está
         # escribiendo/autocorrigiendo como "composición" IME -- Kivy la va
@@ -63,21 +109,48 @@ class CampoOrtografico(MDTextField):
         # queda duplicada ("holahola"). Bug real reportado por el
         # usuario y reproducido con un script aislado: commitText('Hola ')
         # sobre una composición 'hola' sin limpiar daba 'holaHola '.
+        _log_teclado(
+            f'{self._id_log()} keyboard_on_textinput IN text={text!r} '
+            f'ime_comp_antes={self._ime_composition!r} '
+            f'ime_cursor_antes={self._ime_cursor!r} '
+            f'texto_antes={self.text!r} cursor_antes={self.cursor!r}'
+        )
         self._limpiar_residuo_ime()
+        _log_teclado(
+            f'{self._id_log()} keyboard_on_textinput tras_limpiar_residuo '
+            f'texto={self.text!r} cursor={self.cursor!r}'
+        )
         super().keyboard_on_textinput(window, text)
         self._ime_composition = ''
+        _log_teclado(
+            f'{self._id_log()} keyboard_on_textinput OUT '
+            f'texto_despues={self.text!r} cursor_despues={self.cursor!r}'
+        )
 
     def _limpiar_residuo_ime(self):
         comp = self._ime_composition
         cursor_comp = self._ime_cursor
         if not comp or not cursor_comp:
+            _log_teclado(
+                f'{self._id_log()} _limpiar_residuo_ime SKIP '
+                f'(comp={comp!r} cursor_comp={cursor_comp!r})'
+            )
             return
         pcc, pcr = cursor_comp
         lines = self._lines
         if pcr >= len(lines):
+            _log_teclado(
+                f'{self._id_log()} _limpiar_residuo_ime SKIP '
+                f'(pcr={pcr!r} fuera de rango, len(lines)={len(lines)!r})'
+            )
             return
         linea = lines[pcr]
         if linea[pcc - len(comp):pcc] != comp:
+            _log_teclado(
+                f'{self._id_log()} _limpiar_residuo_ime SKIP '
+                f'(linea[{pcc - len(comp)}:{pcc}]={linea[pcc - len(comp):pcc]!r} '
+                f'!= comp={comp!r})'
+            )
             return
         ci = self.cursor_index()
         nueva_linea = linea[:pcc - len(comp)] + linea[pcc:]
@@ -85,6 +158,27 @@ class CampoOrtografico(MDTextField):
             "insert", *self._get_line_from_cursor(pcr, nueva_linea)
         )
         self.cursor = self.get_cursor_from_index(max(0, ci - len(comp)))
+        _log_teclado(
+            f'{self._id_log()} _limpiar_residuo_ime APLICADO '
+            f'comp={comp!r} linea_antes={linea!r} linea_despues={nueva_linea!r}'
+        )
+
+    def insert_text(self, substring, from_undo=False):
+        # Único punto de esta clase base donde se loguea insert_text: las
+        # subclases (CampoMayusculas/CampoOraciones/CampoAcuerdosNumerados)
+        # transforman `substring` (mayúsculas, numeración) y llaman a
+        # super().insert_text(...) en cadena hasta llegar aquí, así que este
+        # log ya muestra el substring final tal como se inserta de verdad.
+        texto_antes = self.text
+        cursor_antes = self.cursor
+        resultado = super().insert_text(substring, from_undo=from_undo)
+        _log_teclado(
+            f'{self._id_log()} insert_text substring={substring!r} '
+            f'from_undo={from_undo!r} texto_antes={texto_antes!r} '
+            f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '
+            f'cursor_despues={self.cursor!r}'
+        )
+        return resultado
 
 
 class CampoMayusculas(CampoOrtografico):
