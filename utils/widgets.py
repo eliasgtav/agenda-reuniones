@@ -10,14 +10,15 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivymd.uix.textfield import MDTextField
 
-# Instrumentación temporal para diagnosticar el bug real de duplicación de
-# texto con el teclado nativo en dispositivo (ver memoria
-# project_agenda_bug_teclado_duplicado): el primer fix (limpiar residuo IME
-# en keyboard_on_textinput) se basó en una simulación de escritorio que NO
-# reproduce el bug real -- hace falta ver la secuencia REAL de eventos que
-# manda Android/Gboard en este dispositivo. Poner en False una vez
-# diagnosticado (no dejar logueando cada tecla en producción).
-_DEBUG_TECLADO = True
+# Instrumentación temporal que permitió diagnosticar en dispositivo real el
+# bug de duplicación de texto con el teclado nativo (ver memoria
+# project_agenda_bug_teclado_duplicado): confirmó que Gboard arrastraba
+# texto ya borrado al siguiente commit, resuelto forzando
+# _restart_input_android() en do_backspace/delete_selection. Se deja el
+# código de logging en el archivo (por si hace falta reabrir el diagnóstico
+# de algo relacionado) pero apagado -- no debe loguear cada tecla en
+# producción.
+_DEBUG_TECLADO = False
 
 
 def _log_teclado(mensaje):
