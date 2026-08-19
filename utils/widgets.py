@@ -180,6 +180,59 @@ class CampoOrtografico(MDTextField):
         )
         return resultado
 
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        # El primer log real en dispositivo mostró que window_on_textedit
+        # NUNCA se llama (el residuo de composición IME no es el problema
+        # real acá). Este es el siguiente sospechoso: TextInput.
+        # keyboard_on_key_down interpreta texto que empieza con
+        # chr(1)/chr(2) como un CANAL DE COMANDOS aparte (ver
+        # TextInput._handle_command en el código fuente de Kivy -- "DEL:N"
+        # para borrar, "INSERT:"/"INSERTN:" para insertar, "SELWORD",
+        # "CURCOL", etc.), completamente por fuera de keyboard_on_textinput/
+        # insert_text ya instrumentados arriba. Si Android manda backspace o
+        # reemplazos de sugerencia por este canal, no aparecía en el log
+        # anterior. Se loguea el texto crudo tal cual llega (repr, para ver
+        # los caracteres de control si los hay) antes de que Kivy lo
+        # interprete.
+        _log_teclado(
+            f'{self._id_log()} keyboard_on_key_down IN keycode={keycode!r} '
+            f'text={text!r} modifiers={modifiers!r} '
+            f'texto_antes={self.text!r} cursor_antes={self.cursor!r} '
+            f'seleccion_antes=({self._selection_from!r},{self._selection_to!r})'
+        )
+        resultado = super().keyboard_on_key_down(window, keycode, text, modifiers)
+        _log_teclado(
+            f'{self._id_log()} keyboard_on_key_down OUT '
+            f'texto_despues={self.text!r} cursor_despues={self.cursor!r} '
+            f'seleccion_despues=({self._selection_from!r},{self._selection_to!r})'
+        )
+        return resultado
+
+    def delete_selection(self, from_undo=False):
+        texto_antes = self.text
+        cursor_antes = self.cursor
+        seleccion = (self._selection_from, self._selection_to)
+        resultado = super().delete_selection(from_undo=from_undo)
+        _log_teclado(
+            f'{self._id_log()} delete_selection from_undo={from_undo!r} '
+            f'seleccion={seleccion!r} texto_antes={texto_antes!r} '
+            f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '
+            f'cursor_despues={self.cursor!r}'
+        )
+        return resultado
+
+    def do_backspace(self, from_undo=False, mode='bkspc'):
+        texto_antes = self.text
+        cursor_antes = self.cursor
+        resultado = super().do_backspace(from_undo=from_undo, mode=mode)
+        _log_teclado(
+            f'{self._id_log()} do_backspace from_undo={from_undo!r} '
+            f'mode={mode!r} texto_antes={texto_antes!r} '
+            f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '
+            f'cursor_despues={self.cursor!r}'
+        )
+        return resultado
+
 
 class CampoMayusculas(CampoOrtografico):
     """CampoOrtografico que convierte a mayúsculas todo lo que se escribe,
