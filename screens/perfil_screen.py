@@ -17,7 +17,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
-from utils.widgets import CampoMayusculas, CampoOraciones
+from utils.widgets import CampoMayusculas, CampoOraciones, BotonPlano
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -99,7 +99,7 @@ Builder.load_string('''
                     size_hint_x: 0.75
                     pos_hint: {"center_x": .5}
 
-                MDRaisedButton:
+                BotonPlano:
                     text: "CAMBIAR FOTO"
                     size_hint_x: None
                     width: dp(160)
@@ -108,7 +108,7 @@ Builder.load_string('''
                     md_bg_color: 0.40, 0.23, 0.72, 1
                     on_release: root.elegir_foto()
 
-                MDRaisedButton:
+                BotonPlano:
                     text: "GUARDAR PERFIL"
                     size_hint_x: None
                     width: dp(160)
@@ -154,14 +154,14 @@ Builder.load_string('''
                 mode: "rectangle"
                 text: "smtp.gmail.com"
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "GUARDAR CORREO"
                 pos_hint: {"center_x": .5}
                 _radius: dp(14)
                 md_bg_color: 0.13, 0.55, 0.13, 1
                 on_release: root.guardar_correo()
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "PROBAR ENVÍO"
                 pos_hint: {"center_x": .5}
                 _radius: dp(14)
@@ -192,7 +192,7 @@ Builder.load_string('''
                 mode: "rectangle"
                 multiline: True
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "GUARDAR MENSAJE"
                 md_bg_color: 0.13, 0.55, 0.13, 1
                 _radius: dp(14)
@@ -211,14 +211,14 @@ Builder.load_string('''
                 adaptive_height: True
                 theme_text_color: "Secondary"
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "HACER BACKUP"
                 pos_hint: {"center_x": .5}
                 _radius: dp(14)
                 md_bg_color: 0.13, 0.40, 0.75, 1
                 on_release: root.hacer_backup()
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "IMPORTAR BACKUP"
                 pos_hint: {"center_x": .5}
                 _radius: dp(14)
@@ -232,7 +232,7 @@ Builder.load_string('''
                 theme_text_color: "Custom"
                 text_color: 0.8, 0.1, 0.1, 1
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "ELIMINAR TODAS LAS REUNIONES"
                 pos_hint: {"center_x": .5}
                 _radius: dp(14)

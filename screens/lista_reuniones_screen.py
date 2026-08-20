@@ -10,7 +10,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from utils.exportar import exportar_excel
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoOrtografico, BotonPlano
 from utils.fechas import fecha_larga
 from utils.abrir_archivo import abrir as abrir_archivo
 
@@ -40,7 +40,7 @@ Builder.load_string('''
             size_hint_y: None
             height: '40dp'
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "Exportar a Excel"
                 pos_hint: {"center_x": .5}
                 on_release: root.exportar('excel')
@@ -105,7 +105,7 @@ class ListaReunionesScreen(MDScreen):
         for fila_filtros in (FILTROS[:mitad], FILTROS[mitad:]):
             fila = MDBoxLayout(size_hint_y=None, height=dp(44), spacing=dp(4))
             for clave, etiqueta, color in fila_filtros:
-                btn = MDRaisedButton(
+                btn = BotonPlano(
                     text=etiqueta,
                     md_bg_color=color,
                     size_hint=(1, 1),

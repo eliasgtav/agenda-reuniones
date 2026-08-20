@@ -632,3 +632,22 @@ class CampoAcuerdosNumerados(CampoOraciones):
             if m:
                 numeros.append(int(m.group(1)))
         return (max(numeros) + 1) if numeros else 1
+
+
+class BotonPlano(MDRaisedButton):
+    """MDRaisedButton sin sombra. En esta versión de KivyMD la sombra de
+    cualquier MDRaisedButton se dibuja SIEMPRE con esquinas cuadradas (la
+    línea que la redondearía junto con `_radius` está comentada en el
+    propio código fuente de KivyMD, y MDRaisedButton no tiene una
+    propiedad `radius` real que la sombra pueda leer como respaldo) --
+    detrás de un botón con esquinas redondeadas (`_radius: dp(14)`, único
+    modo de redondear en esta versión, ver memoria de gotchas de KivyMD)
+    esas esquinas cuadradas de la sombra asoman como un rectángulo oscuro
+    semitransparente detrás del botón. Apagar la elevación evita dibujar
+    la sombra por completo. No alcanza con pasar `elevation=0` al
+    constructor: `ButtonElevationBehaviour.__init__` lo resetea a 2 si
+    llega en 0 -- hay que asignarlo DESPUES de `super().__init__()`."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.elevation = 0
