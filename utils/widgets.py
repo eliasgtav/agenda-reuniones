@@ -80,12 +80,15 @@ class _BarraSugerencias(MDCard):
             ))
         if self not in Window.children:
             Window.add_widget(self)
-        # Reposicionar en un intervalo, no una sola vez: (a) adaptive_size
-        # recalcula self.height de forma diferida (tras el layout de los
-        # botones recien agregados), asi que leerlo en el mismo tick daria
-        # un valor viejo (o 0 la primera vez); (b) la altura del teclado
-        # (ver utils/teclado.py) se mide por polling y puede seguir
-        # cambiando mientras el teclado termina de animarse hacia arriba.
+        # Reposicionar ya mismo (evita un primer frame en la posicion
+        # vieja de la vez anterior, o en (0,0) la primera vez) Y ademas en
+        # un intervalo: (a) adaptive_size recalcula self.height de forma
+        # diferida (tras el layout de los botones recien agregados), asi
+        # que leerlo en el mismo tick daria un valor viejo (o 0 la primera
+        # vez); (b) la altura del teclado (ver utils/teclado.py) puede
+        # seguir cambiando mientras el teclado termina de animarse hacia
+        # arriba.
+        self._reposicionar(campo)
         if self._reposicion_evento is not None:
             self._reposicion_evento.cancel()
         self._reposicion_evento = Clock.schedule_interval(
@@ -104,14 +107,21 @@ class _BarraSugerencias(MDCard):
             # (campo.to_window) como respaldo: si el campo es grande y
             # esta bajo en la pantalla, esa posicion puede quedar detras
             # del teclado. En vez de eso, siempre se pega la barra al
-            # teclado medido (utils/teclado.py); si todavia no hay una
-            # medicion (el polling de 0.3s no alcanzo a correr, o el
-            # campo acaba de recibir foco hace un instante), se asume una
-            # altura conservadora mientras el campo siga enfocado, en vez
-            # de caer detras de donde probablemente este el teclado.
-            alto_teclado = teclado.altura_teclado()
+            # teclado medido (utils/teclado.py). Se pide una medicion
+            # FRESCA (medir_ahora, no el ultimo valor del polling de
+            # fondo): el polling corre cada 0.3s, y justo en el primer
+            # instante en que aparece la barra podia devolver un valor
+            # viejo (0, con el teclado ya abierto) -- el respaldo de ese
+            # caso (fraccion fija de Window.height) resultaba mas chico
+            # que el teclado real y la barra quedaba tapada hasta que el
+            # siguiente tick del polling la corregia sola un momento
+            # despues (bug real reportado con capturas de pantalla). Si
+            # aun asi la medicion fresca da 0 (campo recien enfocado,
+            # teclado todavia animando hacia arriba), se asume una altura
+            # conservadora mientras el campo siga enfocado.
+            alto_teclado = teclado.medir_ahora()
             if alto_teclado <= 0 and campo.focus:
-                alto_teclado = Window.height * 0.35
+                alto_teclado = Window.height * 0.5
             self.adaptive_width = False
             self.width = Window.width
             self.pos = (0, alto_teclado)
@@ -265,20 +275,24 @@ class CampoOrtografico(MDTextField):
         if not crudo:
             return
         prefijo, _palabra, sufijo = _separar_puntuacion(crudo)
-        texto = self.text
-        derecha = texto.rstrip()
+        derecha = self.text.rstrip()
         idx = derecha.rfind(crudo)
         if idx == -1:
             return
         reemplazo = prefijo + opcion + sufijo
-        self.text = derecha[:idx] + reemplazo + texto[idx + len(crudo):]
-        # Kivy no reubica self.cursor al cambiar self.text a mano: si se
-        # deja apuntando a la posicion vieja (p.ej. porque "opcion" es mas
-        # corta que "crudo"), la siguiente tecla que el usuario escriba
-        # hace que TextInput.insert_text indexe una fila que ya no existe
-        # y crashea con IndexError. Se reubica al final de la palabra
-        # reemplazada, que es donde el usuario esperaria seguir escribiendo.
-        self.cursor = self.get_cursor_from_index(idx + len(reemplazo))
+        # Seleccionar+borrar+insert_text (NO asignar self.text a mano):
+        # asi el reemplazo pasa por el insert_text de la subclase
+        # (CampoMayusculas/CampoOraciones/CampoAcuerdosNumerados) y
+        # respeta mayusculas/numeracion igual que si se hubiera escrito a
+        # mano -- bug real reportado por el usuario con capturas de
+        # pantalla: el reemplazo quedaba tal cual la sugerencia (en
+        # minusculas) en campos que fuerzan mayuscula, porque asignar
+        # self.text saltaba por completo esa logica. insert_text tambien
+        # reubica self.cursor solo, sin el calculo manual que hacia esto
+        # antes.
+        self.select_text(idx, idx + len(crudo))
+        self.delete_selection()
+        self.insert_text(reemplazo)
 
     def on_touch_down(self, touch):
         consumido = super().on_touch_down(touch)

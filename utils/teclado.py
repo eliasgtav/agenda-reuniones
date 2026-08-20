@@ -18,12 +18,13 @@ _intervalo_evento = None
 
 def altura_teclado():
     """Ultima altura medida del teclado en pixeles de Window (0 = oculto,
-    o no estamos en Android)."""
+    o no estamos en Android) -- puede estar hasta 0.3s desatrasada, ver
+    medir_ahora() para una lectura fresca sin esperar al siguiente tick
+    del polling."""
     return _altura_actual
 
 
-def _medir(_dt):
-    global _altura_actual
+def _calcular():
     try:
         from jnius import autoclass
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -34,9 +35,30 @@ def _medir(_dt):
         alto_total = decor.getRootView().getHeight()
         alto_teclado = alto_total - r.bottom()
         # Umbral para no confundir barras de sistema/notch con teclado.
-        _altura_actual = alto_teclado if alto_teclado > alto_total * 0.15 else 0
+        return alto_teclado if alto_teclado > alto_total * 0.15 else 0
     except Exception:
-        _altura_actual = 0
+        return 0
+
+
+def _medir(_dt):
+    global _altura_actual
+    _altura_actual = _calcular()
+
+
+def medir_ahora():
+    """Mide la altura del teclado en este instante (mismo cálculo que el
+    polling de fondo, pero sin esperar al siguiente tick de 0.3s) -- para
+    quien necesite la lectura más fresca posible, como _BarraSugerencias
+    reposicionándose justo cuando aparece: esperar al polling de fondo
+    podía dar un valor viejo (0, con el teclado ya abierto) justo en ese
+    primer instante, y el respaldo por defecto (fracción fija de
+    Window.height) resultaba más chico que el teclado real -- la barra
+    quedaba tapada hasta que el siguiente tick del polling la corregía
+    sola un momento después (bug real reportado por el usuario con
+    capturas de pantalla)."""
+    global _altura_actual
+    _altura_actual = _calcular()
+    return _altura_actual
 
 
 def iniciar_monitoreo():
