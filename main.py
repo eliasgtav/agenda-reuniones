@@ -243,6 +243,10 @@ MDBoxLayout:
         def on_start(self):
             from utils import silenciador
             silenciador.restaurar()
+            from utils.ortografia import precargar
+            from utils.teclado import iniciar_monitoreo
+            precargar()
+            iniciar_monitoreo()
             from utils.config import cargar
             config = cargar()
             if not config.get('registrado'):

@@ -1,14 +1,160 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
-"""Campo de texto que delega la corrección ortográfica y las sugerencias
-al teclado nativo del sistema (Gboard, SwiftKey, etc.) en vez de una
-barra flotante propia dentro del lienzo de la app -- así la barra de
-sugerencias aparece pegada al teclado, igual que en WhatsApp/Notas."""
+"""Campo de texto con corrección ortográfica propia (barra de sugerencias
+pegada al teclado, dibujada por la app -- ver _BarraSugerencias abajo).
+
+Se probó delegar esto al teclado nativo (Gboard/SwiftKey, commit
+`785e7b0`) pero se revirtió (ver memoria project_agenda_bug_teclado_
+duplicado): el puente SDLInputConnection que arma python-for-android no
+implementa los métodos que Gboard necesita para reemplazar una palabra con
+seguridad (getTextBeforeCursor/setComposingRegion/etc.), así que tocar una
+sugerencia nativa a veces no hacía nada y a veces pegaba el texto nuevo
+mal calculado sobre el viejo. Con una barra propia el reemplazo lo hace
+la app en Python, sin depender de esa conexión rota."""
 import re
 from time import time
 
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.metrics import dp
+from kivy.utils import platform
+from kivymd.uix.card import MDCard
+from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.textfield import MDTextField
+
+from utils.ortografia import sugerencias
+from utils import teclado
+
+_PUNTUACION = '.,;:!?¡¿"\'()'
+
+
+def _separar_puntuacion(palabra):
+    """('reunión,' -> ('', 'reunión', ',')) para poder revisar solo la
+    parte alfabética y luego reinsertar la puntuación al reemplazar."""
+    inicio = palabra
+    prefijo = ''
+    while inicio and inicio[0] in _PUNTUACION:
+        prefijo += inicio[0]
+        inicio = inicio[1:]
+    sufijo = ''
+    while inicio and inicio[-1] in _PUNTUACION:
+        sufijo = inicio[-1] + sufijo
+        inicio = inicio[:-1]
+    return prefijo, inicio, sufijo
+
+
+class _BarraSugerencias(MDCard):
+    """Overlay compartido (una sola instancia para toda la app) que se
+    agrega/quita de Window según haga falta, en vez de vivir dentro del
+    layout KV de cada pantalla — así no hay que tocar la fila (lápiz +
+    micrófono) de ningún campo ya existente."""
+
+    def __init__(self, **kwargs):
+        super().__init__(
+            orientation='horizontal',
+            adaptive_size=True,
+            spacing=dp(6),
+            padding=dp(6),
+            md_bg_color=(1, 1, 1, 1),
+            elevation=8,
+            **kwargs,
+        )
+        self.campo = None
+        self._reposicion_evento = None
+
+    def mostrar(self, campo, opciones):
+        self.campo = campo
+        self.clear_widgets()
+        for opcion in opciones:
+            self.add_widget(MDRaisedButton(
+                text=opcion,
+                font_size='13sp',
+                size_hint_y=None,
+                height=dp(36),
+                # on_press (toque inicial), no on_release: FocusBehavior
+                # desenfoca TODOS los campos enfocados justo despues de
+                # CUALQUIER touch_up en la pantalla (ver
+                # kivy/uix/behaviors/focus.py::_handle_post_on_touch_up),
+                # asi que conviene reemplazar la palabra en cuanto el dedo
+                # toca el boton, no esperar a que lo suelte.
+                on_press=lambda _inst, o=opcion: self._elegir(o),
+            ))
+        if self not in Window.children:
+            Window.add_widget(self)
+        # Reposicionar en un intervalo, no una sola vez: (a) adaptive_size
+        # recalcula self.height de forma diferida (tras el layout de los
+        # botones recien agregados), asi que leerlo en el mismo tick daria
+        # un valor viejo (o 0 la primera vez); (b) la altura del teclado
+        # (ver utils/teclado.py) se mide por polling y puede seguir
+        # cambiando mientras el teclado termina de animarse hacia arriba.
+        if self._reposicion_evento is not None:
+            self._reposicion_evento.cancel()
+        self._reposicion_evento = Clock.schedule_interval(
+            lambda _dt: self._reposicionar(campo), 0.15
+        )
+
+    def _reposicionar(self, campo):
+        if self.campo is not campo:
+            return
+        if platform == 'android':
+            # En Android, Window.softinput_mode ("below_target", puesto en
+            # main.py) NO hace nada con el bootstrap SDL2 -- Window.
+            # keyboard_height siempre da 0 ahi (confirmado en el codigo
+            # fuente de Kivy), asi que Kivy nunca reacomoda nada por su
+            # cuenta. Por eso NO conviene usar la posicion del campo
+            # (campo.to_window) como respaldo: si el campo es grande y
+            # esta bajo en la pantalla, esa posicion puede quedar detras
+            # del teclado. En vez de eso, siempre se pega la barra al
+            # teclado medido (utils/teclado.py); si todavia no hay una
+            # medicion (el polling de 0.3s no alcanzo a correr, o el
+            # campo acaba de recibir foco hace un instante), se asume una
+            # altura conservadora mientras el campo siga enfocado, en vez
+            # de caer detras de donde probablemente este el teclado.
+            alto_teclado = teclado.altura_teclado()
+            if alto_teclado <= 0 and campo.focus:
+                alto_teclado = Window.height * 0.35
+            self.adaptive_width = False
+            self.width = Window.width
+            self.pos = (0, alto_teclado)
+        else:
+            self.adaptive_width = True
+            x, y = campo.to_window(campo.x, campo.y)
+            self.pos = (x, y - self.height - dp(4))
+
+    def ocultar(self, campo=None):
+        if campo is not None and self.campo is not campo:
+            return
+        self.campo = None
+        if self._reposicion_evento is not None:
+            self._reposicion_evento.cancel()
+            self._reposicion_evento = None
+        if self in Window.children:
+            Window.remove_widget(self)
+
+    def _elegir(self, opcion):
+        campo = self.campo
+        self.ocultar()
+        if campo is not None:
+            # Un frame despues, ya resuelto el touch_up completo (incluido
+            # el desenfoque global de FocusBehavior), para no competir con
+            # el resto del manejo de ese mismo toque.
+            Clock.schedule_once(lambda _dt: campo.reemplazar_ultima_palabra(opcion), 0)
+
+
+_barra = None
+
+
+def _obtener_barra():
+    """Instancia _BarraSugerencias perezosamente, en su primer uso real
+    (cuando el usuario ya empezó a escribir), no al importar este módulo:
+    los widgets de KivyMD (ThemableBehavior) exigen que la MDApp ya exista,
+    y utils/widgets.py se importa desde screens/*.py ANTES de que main.py
+    cree la instancia de AgendaApp (import a nivel de módulo, arriba del
+    todo del archivo) — instanciar aquí mismo rompía el arranque de la app
+    entera con un ValueError de KivyMD."""
+    global _barra
+    if _barra is None:
+        _barra = _BarraSugerencias()
+    return _barra
 
 # Instrumentación temporal que permitió diagnosticar en dispositivo real el
 # bug de duplicación de texto con el teclado nativo (ver memoria
@@ -69,23 +215,70 @@ def _programar_restart_input():
 
 
 class CampoOrtografico(MDTextField):
-    """MDTextField que pide explícitamente input_type='text' (el default
-    de Kivy 2.3 es 'null', que en Android corre el teclado en modo
-    limitado "generate key events" y SUPRIME la barra nativa de
-    sugerencias/autocorrección pase lo que sea keyboard_suggestions) y
-    keyboard_suggestions=True, para que el propio teclado del sistema
-    muestre su franja de sugerencias sin que la app tenga que dibujar
-    nada encima."""
+    """MDTextField con corrección ortográfica en español vía barra propia
+    (ver _BarraSugerencias arriba y utils/ortografia.py para el corrector
+    compartido). No fija input_type='text' a propósito -- eso activaría
+    ADEMÁS la franja nativa de sugerencias de Gboard, que en este puente
+    SDL2 no reemplaza el texto de forma confiable (ver docstring del
+    módulo); dejar input_type en su valor por defecto ('null') evita que
+    aparezcan dos franjas de sugerencias compitiendo, una funcional
+    (la propia) y otra rota (la nativa)."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.input_type = 'text'
-        self.keyboard_suggestions = True
         self._ultimo_toque_ts = 0
         self._ultimo_toque_pos = None
+        self._revision_evento = None
+        self.bind(text=self._on_text_cambio, focus=self._on_focus_cambio)
 
     def _id_log(self):
         return getattr(self, 'hint_text', '') or f'campo{id(self) % 10000}'
+
+    def _on_text_cambio(self, *_args):
+        if self._revision_evento is not None:
+            self._revision_evento.cancel()
+        self._revision_evento = Clock.schedule_once(self._revisar, 0.4)
+
+    def _on_focus_cambio(self, _inst, tiene_foco):
+        if tiene_foco:
+            return
+        if self._revision_evento is not None:
+            self._revision_evento.cancel()
+            self._revision_evento = None
+        _obtener_barra().ocultar(self)
+
+    def _ultima_palabra_cruda(self):
+        partes = self.text.split()
+        return partes[-1] if partes else ''
+
+    def _revisar(self, _dt):
+        crudo = self._ultima_palabra_cruda()
+        _prefijo, palabra, _sufijo = _separar_puntuacion(crudo)
+        opciones = sugerencias(palabra) if palabra else []
+        if opciones and self.focus:
+            _obtener_barra().mostrar(self, opciones)
+        else:
+            _obtener_barra().ocultar(self)
+
+    def reemplazar_ultima_palabra(self, opcion):
+        crudo = self._ultima_palabra_cruda()
+        if not crudo:
+            return
+        prefijo, _palabra, sufijo = _separar_puntuacion(crudo)
+        texto = self.text
+        derecha = texto.rstrip()
+        idx = derecha.rfind(crudo)
+        if idx == -1:
+            return
+        reemplazo = prefijo + opcion + sufijo
+        self.text = derecha[:idx] + reemplazo + texto[idx + len(crudo):]
+        # Kivy no reubica self.cursor al cambiar self.text a mano: si se
+        # deja apuntando a la posicion vieja (p.ej. porque "opcion" es mas
+        # corta que "crudo"), la siguiente tecla que el usuario escriba
+        # hace que TextInput.insert_text indexe una fila que ya no existe
+        # y crashea con IndexError. Se reubica al final de la palabra
+        # reemplazada, que es donde el usuario esperaria seguir escribiendo.
+        self.cursor = self.get_cursor_from_index(idx + len(reemplazo))
 
     def on_touch_down(self, touch):
         consumido = super().on_touch_down(touch)
