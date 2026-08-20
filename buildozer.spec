@@ -5,6 +5,7 @@ package.domain = com.eliasgt.agenda
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
+icon.filename = %(source.dir)s/data/icon.png
 
 requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,et_xmlfile,plyer,pillow,pyspellchecker,android,sqlite3,openssl
 

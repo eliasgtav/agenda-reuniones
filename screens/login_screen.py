@@ -6,7 +6,7 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
-from utils.widgets import CampoMayusculas
+from utils.widgets import CampoMayusculas, BotonPlano
 
 Builder.load_string('''
 <LoginScreen>:
@@ -84,7 +84,7 @@ Builder.load_string('''
                 size_hint_y: None
                 height: '10dp'
 
-            MDRaisedButton:
+            BotonPlano:
                 text: "INGRESAR A LA APP"
                 pos_hint: {"center_x": .5}
                 size_hint_x: None
