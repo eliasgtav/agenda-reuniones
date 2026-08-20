@@ -1035,6 +1035,19 @@ class DetalleReunionScreen(MDScreen):
             for linea in lineas
         ]
         menu = MDDropdownMenu(caller=boton, items=menu_items, width_mult=5)
+        # width_mult esta deprecado en esta version de KivyMD (no hace
+        # nada) -- sin un self.width valido ANTES de open(), el menu
+        # decide hacia que lado crecer usando el ancho por defecto de
+        # Kivy (100, practicamente 0 a efectos del calculo), y recien
+        # despues lo agranda a dp(240) sin volver a chequear que entre en
+        # pantalla. Con el boton que abre este menu pegado al borde
+        # derecho del dialogo, terminaba creciendo hacia la derecha y
+        # saliendose de la pantalla (bug real reportado con capturas).
+        # Fijar el ancho ANTES de open() hace que el calculo de
+        # crecimiento (adjust_width/check_hor_growth, ambos corren dentro
+        # de open()) ya use el ancho real y elija crecer hacia la
+        # izquierda cuando hace falta.
+        menu.width = dp(280)
         menu_holder.append(menu)
         menu.open()
 
@@ -1148,6 +1161,11 @@ class DetalleReunionScreen(MDScreen):
                 for nombre in participantes
             ]
             menu_resp = MDDropdownMenu(caller=btn_resp, items=menu_items, width_mult=4)
+            # Ver comentario de menu.width en _abrir_menu_traer_acuerdo
+            # (mismo bug de width_mult deprecado en esta version de
+            # KivyMD): fijar el ancho antes de abrir para que el calculo
+            # de hacia que lado crecer sea correcto.
+            menu_resp.width = dp(224)
             menu_holder.append(menu_resp)
             btn_resp.bind(on_release=lambda _: menu_resp.open())
             fila_resp_iconos.add_widget(btn_resp)
