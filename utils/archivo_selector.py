@@ -81,6 +81,12 @@ def _copiar_uri_a_archivo(uri, dest_dir, nombre):
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
     FileOutputStream = autoclass('java.io.FileOutputStream')
 
+    # nombre viene del DISPLAY_NAME que devuelve el ContentResolver -- no es
+    # de fiar (un proveedor de contenido malicioso podria devolver algo como
+    # "../../otro_archivo"). os.path.basename() descarta cualquier
+    # componente de ruta, dejando solo el nombre de archivo real.
+    nombre = os.path.basename(nombre) or 'archivo_adjunto'
+
     resolver = PythonActivity.mActivity.getContentResolver()
     entrada = resolver.openInputStream(uri)
     os.makedirs(dest_dir, exist_ok=True)

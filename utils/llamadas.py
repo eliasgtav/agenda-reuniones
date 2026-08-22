@@ -18,12 +18,22 @@ _mensaje_actual = ''
 MAX_INTENTOS_SMS = 3
 INTERVALO_REINTENTO_SMS = 5  # segundos entre reintentos mientras siga timbrando
 
+# Apagado por defecto: el log escribe el número de quien llama en texto
+# plano a disco (app_storage_path()/llamadas_debug.log), y no debe quedar
+# acumulando datos sensibles reales en uso normal. Cambiar a True solo para
+# reabrir el diagnóstico (ver [[project_agenda_build_android]] para cómo se
+# usó la última vez), y volver a False antes de compilar para el usuario.
+_DEBUG_LLAMADAS = False
+
 
 def _log(mensaje):
     """Registro de depuración temporal (ver [[project_agenda_build_android]]):
     todo lo demás en este módulo se traga las excepciones para no romper la
     grabación si algo de esto falla, así que sin esto es imposible saber por
-    qué no llegó un SMS. Escribe en app_storage_path()/llamadas_debug.log."""
+    qué no llegó un SMS. Escribe en app_storage_path()/llamadas_debug.log.
+    No hace nada salvo que _DEBUG_LLAMADAS esté en True (ver arriba)."""
+    if not _DEBUG_LLAMADAS:
+        return
     try:
         import traceback
         from datetime import datetime

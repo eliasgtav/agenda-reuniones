@@ -4,6 +4,21 @@ import os
 import shutil
 from datetime import datetime
 
+_CARACTERES_FORMULA = ('=', '+', '-', '@')
+
+
+def _valor_seguro(valor):
+    """Antepone un apóstrofe a texto que empiece con =, +, - o @ antes de
+    escribirlo en una celda de CSV/Excel. Sin esto, texto libre del usuario
+    (asunto, notas, nombres de participantes, etc.) que empiece con esos
+    caracteres puede interpretarse como fórmula (o payload DDE) al abrir el
+    archivo exportado en Excel -- "inyección de fórmulas CSV/Excel", una
+    clase de vulnerabilidad conocida al exportar datos de usuario sin
+    escapar."""
+    if isinstance(valor, str) and valor[:1] in _CARACTERES_FORMULA:
+        return "'" + valor
+    return valor
+
 
 def _ruta_descargas():
     # os.path.expanduser('~') no resuelve a la carpeta "Descargas" compartida
@@ -51,10 +66,10 @@ def exportar_csv(reuniones, db):
         for r in reuniones:
             parts = db.listar_participantes(r['id'])
             nombres = '; '.join(p['nombre'] for p in parts)
-            writer.writerow([
+            writer.writerow([_valor_seguro(v) for v in (
                 r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
                 r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
-            ])
+            )])
     return ruta
 
 
@@ -94,10 +109,10 @@ def exportar_excel(reuniones, db):
     for r in reuniones:
         parts = db.listar_participantes(r['id'])
         nombres = '; '.join(p['nombre'] for p in parts)
-        fila = [
+        fila = [_valor_seguro(v) for v in (
             r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
             r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
-        ]
+        )]
         ws.append(fila)
         color = COLORES_ESTADO.get(r['estado'], 'FFFFFFFF')
         fill = PatternFill('solid', fgColor=color)
