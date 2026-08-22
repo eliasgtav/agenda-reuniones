@@ -22,6 +22,7 @@ Builder.load_string('''
 
         MDScrollView:
             id: scroll_view
+            on_scroll_y: root._on_scroll_y(self.scroll_y)
             MDBoxLayout:
                 id: lista_acuerdos
                 orientation: 'vertical'
@@ -30,10 +31,15 @@ Builder.load_string('''
                 padding: [0, '4dp']
 ''')
 
+PAGE_SIZE = 40
+
 
 class SeguimientoScreen(MDScreen):
     _scroll_retry_events = None
     _load_event = None
+    _offset = 0
+    _hay_mas = True
+    _cargando_mas = False
 
     def on_pre_enter(self):
         self._load_event = Clock.schedule_once(lambda dt: self.cargar(), 0)
@@ -48,11 +54,17 @@ class SeguimientoScreen(MDScreen):
         self._scroll_retry_events = None
 
     def cargar(self):
+        # Misma logica de paginacion que lista_reuniones_screen.py: primera
+        # pagina aqui, el resto via cargar_mas() al llegar cerca del final
+        # del scroll (ver benchmark en scripts/benchmark_carga.py).
         app = App.get_running_app()
-        acuerdos = app.db.listar_todos_acuerdos()
+        self._offset = 0
+        self._hay_mas = True
+        acuerdos = app.db.listar_todos_acuerdos(limit=PAGE_SIZE, offset=0)
         lista = self.ids.lista_acuerdos
         lista.clear_widgets()
         if not acuerdos:
+            self._hay_mas = False
             lista.add_widget(MDLabel(
                 text='Sin acuerdos registrados.',
                 halign='center',
@@ -63,7 +75,26 @@ class SeguimientoScreen(MDScreen):
             return
         for ac in acuerdos:
             lista.add_widget(self._crear_card(ac))
+        self._offset = len(acuerdos)
+        self._hay_mas = len(acuerdos) == PAGE_SIZE
         self._forzar_scroll_arriba()
+
+    def _on_scroll_y(self, valor):
+        if valor <= 0.15:
+            self.cargar_mas()
+
+    def cargar_mas(self):
+        if self._cargando_mas or not self._hay_mas:
+            return
+        self._cargando_mas = True
+        app = App.get_running_app()
+        acuerdos = app.db.listar_todos_acuerdos(limit=PAGE_SIZE, offset=self._offset)
+        lista = self.ids.lista_acuerdos
+        for ac in acuerdos:
+            lista.add_widget(self._crear_card(ac))
+        self._offset += len(acuerdos)
+        self._hay_mas = len(acuerdos) == PAGE_SIZE
+        self._cargando_mas = False
 
     def _forzar_scroll_arriba(self):
         # Ver nota completa en dashboard_screen.py.

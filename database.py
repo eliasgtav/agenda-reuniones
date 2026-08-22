@@ -97,6 +97,23 @@ class Database:
                     created_at  TEXT    DEFAULT (datetime('now','localtime')),
                     FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE
                 );
+
+                -- Sin estos indices, listar_reuniones/listar_todos_acuerdos/
+                -- stats_dashboard hacian un recorrido completo de la tabla en
+                -- cada WHERE estado=?/fecha=?/reunion_id=?/plazo<=? -- medido
+                -- con scripts/benchmark_carga.py: ~290ms para listar 10000
+                -- reuniones sin filtro, creciendo peor que lineal con el
+                -- volumen. CREATE INDEX IF NOT EXISTS es idempotente y se
+                -- aplica solo en instalaciones existentes (no requiere
+                -- migracion ALTER TABLE como las columnas de mas abajo).
+                CREATE INDEX IF NOT EXISTS idx_reuniones_fecha ON reuniones(fecha);
+                CREATE INDEX IF NOT EXISTS idx_reuniones_estado ON reuniones(estado);
+                CREATE INDEX IF NOT EXISTS idx_participantes_reunion ON participantes(reunion_id);
+                CREATE INDEX IF NOT EXISTS idx_archivos_reunion ON archivos(reunion_id);
+                CREATE INDEX IF NOT EXISTS idx_alertas_reunion ON alertas(reunion_id);
+                CREATE INDEX IF NOT EXISTS idx_acuerdos_reunion ON acuerdos(reunion_id);
+                CREATE INDEX IF NOT EXISTS idx_acuerdos_estado ON acuerdos(estado);
+                CREATE INDEX IF NOT EXISTS idx_acuerdos_plazo ON acuerdos(plazo);
             ''')
             # Instalaciones existentes ya tenian la tabla 'reuniones' sin
             # columnas agregadas despues; CREATE TABLE IF NOT EXISTS no las
@@ -143,7 +160,7 @@ class Database:
             row = conn.execute('SELECT * FROM reuniones WHERE id=?', (reunion_id,)).fetchone()
             return dict(row) if row else None
 
-    def listar_reuniones(self, estado=None, busqueda=None):
+    def listar_reuniones(self, estado=None, busqueda=None, limit=None, offset=0):
         query = 'SELECT * FROM reuniones'
         params = []
         conds = []
@@ -159,6 +176,12 @@ class Database:
         if conds:
             query += ' WHERE ' + ' AND '.join(conds)
         query += ' ORDER BY fecha DESC, hora DESC'
+        # limit=None (por defecto) mantiene el comportamiento de siempre --
+        # trae todo, usado por Exportar a Excel y cualquier otro llamador que
+        # necesite el conjunto completo, no solo una pagina.
+        if limit is not None:
+            query += ' LIMIT ? OFFSET ?'
+            params += [limit, offset]
         with self._conn() as conn:
             return [dict(r) for r in conn.execute(query, params).fetchall()]
 
@@ -304,7 +327,7 @@ class Database:
         with self._conn() as conn:
             conn.execute('UPDATE acuerdos SET estado=? WHERE id=?', (estado, acuerdo_id))
 
-    def listar_todos_acuerdos(self, estado=None, busqueda=None):
+    def listar_todos_acuerdos(self, estado=None, busqueda=None, limit=None, offset=0):
         hoy = datetime.now().strftime('%Y-%m-%d')
         query = '''
             SELECT a.*, r.asunto as reunion_asunto, r.fecha as reunion_fecha
@@ -326,6 +349,10 @@ class Database:
         if conds:
             query += ' WHERE ' + ' AND '.join(conds)
         query += " ORDER BY (a.plazo = '' OR a.plazo IS NULL), a.plazo ASC"
+        # Ver nota de limit=None en listar_reuniones -- mismo criterio aqui.
+        if limit is not None:
+            query += ' LIMIT ? OFFSET ?'
+            params += [limit, offset]
         with self._conn() as conn:
             rows = conn.execute(query, params).fetchall()
             return [dict(r) for r in rows]

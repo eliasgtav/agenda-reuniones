@@ -48,6 +48,7 @@ Builder.load_string('''
 
         MDScrollView:
             id: scroll_view
+            on_scroll_y: root._on_scroll_y(self.scroll_y)
             MDBoxLayout:
                 id: lista_reuniones
                 orientation: 'vertical'
@@ -55,6 +56,8 @@ Builder.load_string('''
                 spacing: '6dp'
                 padding: [0, '4dp']
 ''')
+
+PAGE_SIZE = 40
 
 FILTROS = [
     ('todas',       'Todas',        (0.40, 0.40, 0.40, 1)),
@@ -79,6 +82,9 @@ class ListaReunionesScreen(MDScreen):
     _dialog = None
     _scroll_retry_events = None
     _load_event = None
+    _offset = 0
+    _hay_mas = True
+    _cargando_mas = False
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -130,14 +136,23 @@ class ListaReunionesScreen(MDScreen):
         self.cargar()
 
     def cargar(self):
+        # Trae solo la primera pagina (PAGE_SIZE) -- con miles de reuniones
+        # guardadas, traer y dibujar la tabla completa de una vez se sentia
+        # lento (medido con scripts/benchmark_carga.py). El resto se agrega
+        # con cargar_mas() al acercarse al final del scroll.
         app = App.get_running_app()
+        self._offset = 0
+        self._hay_mas = True
         reuniones = app.db.listar_reuniones(
             estado=self._filtro_activo,
             busqueda=self._busqueda or None,
+            limit=PAGE_SIZE,
+            offset=0,
         )
         lista = self.ids.lista_reuniones
         lista.clear_widgets()
         if not reuniones:
+            self._hay_mas = False
             lista.add_widget(MDLabel(
                 text='Sin resultados.',
                 halign='center',
@@ -148,7 +163,33 @@ class ListaReunionesScreen(MDScreen):
             return
         for r in reuniones:
             lista.add_widget(self._crear_card(r))
+        self._offset = len(reuniones)
+        self._hay_mas = len(reuniones) == PAGE_SIZE
         self._forzar_scroll_arriba()
+
+    def _on_scroll_y(self, valor):
+        # scroll_y de MDScrollView: 1 = arriba del todo, 0 = abajo del todo.
+        # Cerca del final (<=0.15) se pide la siguiente pagina.
+        if valor <= 0.15:
+            self.cargar_mas()
+
+    def cargar_mas(self):
+        if self._cargando_mas or not self._hay_mas:
+            return
+        self._cargando_mas = True
+        app = App.get_running_app()
+        reuniones = app.db.listar_reuniones(
+            estado=self._filtro_activo,
+            busqueda=self._busqueda or None,
+            limit=PAGE_SIZE,
+            offset=self._offset,
+        )
+        lista = self.ids.lista_reuniones
+        for r in reuniones:
+            lista.add_widget(self._crear_card(r))
+        self._offset += len(reuniones)
+        self._hay_mas = len(reuniones) == PAGE_SIZE
+        self._cargando_mas = False
 
     def _forzar_scroll_arriba(self):
         # Ver nota completa en dashboard_screen.py.
