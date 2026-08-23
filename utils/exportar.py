@@ -55,21 +55,29 @@ def _ruta_salida(nombre):
     return os.path.join(_ruta_descargas(), f'{nombre}_{ts}')
 
 
+_ENCABEZADOS = ['ID', 'Asunto', 'Fecha', 'Hora', 'Lugar',
+                'Estado', 'Participantes', 'Notas', 'Conclusión', 'Creado']
+
+
+def _fila_reunion(r, db):
+    """Arma una fila de exportación (misma columna/orden que _ENCABEZADOS,
+    ya escapada con _valor_seguro) -- antes duplicado entre exportar_csv y
+    exportar_excel."""
+    parts = db.listar_participantes(r['id'])
+    nombres = '; '.join(p['nombre'] for p in parts)
+    return [_valor_seguro(v) for v in (
+        r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
+        r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
+    )]
+
+
 def exportar_csv(reuniones, db):
     ruta = _ruta_salida('agenda_reuniones') + '.csv'
     with open(ruta, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
-        writer.writerow([
-            'ID', 'Asunto', 'Fecha', 'Hora', 'Lugar',
-            'Estado', 'Participantes', 'Notas', 'Conclusión', 'Creado',
-        ])
+        writer.writerow(_ENCABEZADOS)
         for r in reuniones:
-            parts = db.listar_participantes(r['id'])
-            nombres = '; '.join(p['nombre'] for p in parts)
-            writer.writerow([_valor_seguro(v) for v in (
-                r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
-                r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
-            )])
+            writer.writerow(_fila_reunion(r, db))
     return ruta
 
 
@@ -91,9 +99,7 @@ def exportar_excel(reuniones, db):
         'no_asistida': 'FFFFE0B2',
     }
 
-    encabezados = ['ID', 'Asunto', 'Fecha', 'Hora', 'Lugar',
-                   'Estado', 'Participantes', 'Notas', 'Conclusión', 'Creado']
-    ws.append(encabezados)
+    ws.append(_ENCABEZADOS)
 
     header_font = Font(bold=True, color='FFFFFFFF')
     header_fill = PatternFill('solid', fgColor='FF1565C0')
@@ -107,13 +113,7 @@ def exportar_excel(reuniones, db):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ancho
 
     for r in reuniones:
-        parts = db.listar_participantes(r['id'])
-        nombres = '; '.join(p['nombre'] for p in parts)
-        fila = [_valor_seguro(v) for v in (
-            r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
-            r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
-        )]
-        ws.append(fila)
+        ws.append(_fila_reunion(r, db))
         color = COLORES_ESTADO.get(r['estado'], 'FFFFFFFF')
         fill = PatternFill('solid', fgColor=color)
         for cell in ws[ws.max_row]:

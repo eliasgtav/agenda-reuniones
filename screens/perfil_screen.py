@@ -18,6 +18,8 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
 from utils.widgets import CampoMayusculas, CampoOraciones, BotonPlano
+from utils.mixins_pantalla import ScrollArribaMixin
+from utils.perfil import iniciales_de
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -252,8 +254,7 @@ Builder.load_string('''
                 padding: [0, "16dp"]
 ''')
 
-class PerfilScreen(MDScreen):
-    _scroll_retry_events = None
+class PerfilScreen(ScrollArribaMixin, MDScreen):
     _load_event = None
 
     def on_pre_enter(self):
@@ -261,13 +262,10 @@ class PerfilScreen(MDScreen):
         self._load_event = Clock.schedule_once(lambda dt: self._cargar_perfil(), 0)
 
     def on_leave(self):
-        # Ver nota completa en dashboard_screen.py.
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        self._cancelar_scroll_retries()
 
     def _cargar_perfil(self):
         config = cargar()
@@ -290,22 +288,8 @@ class PerfilScreen(MDScreen):
     def _actualizar_iniciales(self):
         nombres   = self.ids.nombres_field.text.strip()
         apellidos = self.ids.apellidos_field.text.strip()
-        self.ids.iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
+        self.ids.iniciales_lbl.text = iniciales_de(nombres, apellidos)
 
-    def _forzar_scroll_arriba(self):
-        # Ver nota completa en dashboard_screen.py.
-        from kivy.clock import Clock
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
 
     def _rutas_foto(self):
         if platform == 'android':
@@ -680,13 +664,16 @@ class PerfilScreen(MDScreen):
 
     def _borrar_bd(self):
         app = App.get_running_app()
+        # DELETE FROM reuniones basta: ON DELETE CASCADE (PRAGMA
+        # foreign_keys=ON en cada conexion, ver database.py::_conn) ya
+        # arrastra alertas/archivos/participantes/acuerdos -- borrarlos
+        # antes a mano por separado (como estaba, y sin incluir nunca
+        # 'acuerdos') funcionaba igual pero parecia un olvido real.
         with app.db._conn() as conn:
-            conn.executescript('''
-                DELETE FROM alertas;
-                DELETE FROM archivos;
-                DELETE FROM participantes;
-                DELETE FROM reuniones;
-            ''')
+            conn.execute('DELETE FROM reuniones')
+        # Evita que quede apuntando a un id que ya no existe si el usuario
+        # estaba viendo/grabando una reunion justo antes de borrar todo.
+        app.reunion_activa_id = None
         self._mostrar('Listo', 'Todas las reuniones han sido eliminadas.')
 
     def _mostrar(self, titulo, texto):

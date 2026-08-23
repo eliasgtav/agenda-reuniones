@@ -19,12 +19,21 @@ silenciado, quedaría mudo para siempre sin esto -- restaurar() se llama de
 nuevo en el próximo arranque (main.py::on_start) y sí puede recuperarlo."""
 from kivy.utils import platform
 
+# Igual que utils/llamadas.py::_DEBUG_LLAMADAS -- apagado por defecto. Este
+# log no escribe números de teléfono (solo modo/volumen del timbre), pero
+# igual queda acumulando datos a disco en cada silenciar()/restaurar() en
+# uso normal si no se apaga.
+_DEBUG_SILENCIADOR = False
+
 
 def _log(mensaje):
     """Registro de depuración temporal, mismo patrón que utils/llamadas.py
     (ver [[project_agenda_build_android]]) -- los prints de Python no
     aparecen con ningún tag reconocible en logcat en este dispositivo, y
-    todo lo demás en este módulo se traga las excepciones en silencio."""
+    todo lo demás en este módulo se traga las excepciones en silencio.
+    No hace nada salvo que _DEBUG_SILENCIADOR esté en True."""
+    if not _DEBUG_SILENCIADOR:
+        return
     try:
         from datetime import datetime
         from android.storage import app_storage_path

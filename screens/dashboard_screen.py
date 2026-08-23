@@ -8,6 +8,8 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDRaisedButton
 from utils.config import cargar as cargar_config
+from utils.mixins_pantalla import ScrollArribaMixin
+from utils.perfil import iniciales_de
 
 Builder.load_string('''
 <DashboardScreen>:
@@ -118,6 +120,21 @@ STAT_CONFIG = [
     ('total',       'Total',        (0.40, 0.23, 0.72, 1)),
 ]
 
+# Antes solo la tarjeta "Hoy" navegaba al tocarla (unica con on_release) --
+# el mecanismo ya existia entero (lista_reuniones_screen soporta filtrar por
+# cualquiera de estos estados), asi que extenderlo al resto era barato. Los
+# valores mapean la clave de STAT_CONFIG (coincide con database.py::
+# stats_dashboard) al valor de _filtro_activo que espera ListaReunionesScreen
+# (database.py::listar_reuniones), que usa el estado en singular.
+_FILTRO_POR_STAT = {
+    'hoy': 'hoy',
+    'pendientes': 'pendiente',
+    'realizadas': 'realizada',
+    'canceladas': 'cancelada',
+    'no_asistidas': 'no_asistida',
+    'total': 'todas',
+}
+
 
 def _stat_card(valor, etiqueta, color, on_release=None):
     card = MDCard(
@@ -150,8 +167,7 @@ def _stat_card(valor, etiqueta, color, on_release=None):
     return card
 
 
-class DashboardScreen(MDScreen):
-    _scroll_retry_events = None
+class DashboardScreen(ScrollArribaMixin, MDScreen):
     _load_event = None
 
     def on_pre_enter(self):
@@ -167,9 +183,7 @@ class DashboardScreen(MDScreen):
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        self._cancelar_scroll_retries()
 
     def actualizar(self):
         app = App.get_running_app()
@@ -181,7 +195,8 @@ class DashboardScreen(MDScreen):
         grid.clear_widgets()
         stats = db.stats_dashboard()
         for key, etiqueta, color in STAT_CONFIG:
-            on_release = self._ir_a_hoy if key == 'hoy' else None
+            filtro = _FILTRO_POR_STAT.get(key)
+            on_release = (lambda *_a, f=filtro: self._ir_a_filtro(f)) if filtro else None
             grid.add_widget(_stat_card(stats.get(key, 0), etiqueta, color, on_release))
 
         activos = db.contar_acuerdos_activos()
@@ -191,32 +206,11 @@ class DashboardScreen(MDScreen):
 
         self._forzar_scroll_arriba()
 
-    def _ir_a_hoy(self, *args):
+    def _ir_a_filtro(self, filtro):
         app = App.get_running_app()
         lista_screen = app.root.ids.sm.get_screen('lista_reuniones')
-        lista_screen._filtro_activo = 'hoy'
+        lista_screen._filtro_activo = filtro
         app.go_to('lista_reuniones')
-
-    def _forzar_scroll_arriba(self):
-        # El contenido (adaptive_height) puede tardar varios cuadros en
-        # terminar de medirse en Android, y mientras tanto el MDScrollView
-        # puede quedar "scrolleado" al fondo -- aunque scroll_y ya reporte
-        # 1, el area dibujada no siempre coincide (condicion de carrera, no
-        # se arregla con un solo intento a tiempo fijo). Se reintenta varias
-        # veces durante el primer segundo y se fuerza update_from_scroll()
-        # para que el redibujado coincida con la propiedad.
-        from kivy.clock import Clock
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
 
     def actualizar_perfil(self):
         import os
@@ -236,4 +230,4 @@ class DashboardScreen(MDScreen):
         self.ids.avatar_iniciales_lbl.opacity = 0 if existe else 1
         nombres = config.get('nombres', '')
         apellidos = config.get('apellidos', '')
-        self.ids.avatar_iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
+        self.ids.avatar_iniciales_lbl.text = iniciales_de(nombres, apellidos)

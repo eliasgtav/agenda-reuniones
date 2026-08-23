@@ -94,7 +94,19 @@ def cargar():
                 # Perfil) ya se escribe cifrado.
                 return config
         except Exception:
-            pass
+            # Un JSON corrupto (escritura interrumpida, disco lleno, encoding
+            # raro) antes devolvía los defaults en silencio -- el usuario
+            # perdía correo/contraseña/mensaje SMS sin ningún aviso ni forma
+            # de recuperarlo. Se guarda el archivo dañado aparte (con
+            # timestamp, nunca sobrescribe un backup previo) antes de caer a
+            # los defaults, para poder inspeccionarlo/recuperarlo a mano.
+            try:
+                import shutil
+                from datetime import datetime
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                shutil.copy2(ruta, f'{ruta}.corrupto_{ts}')
+            except Exception:
+                pass
     return dict(_DEFAULTS)
 
 

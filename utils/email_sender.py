@@ -4,6 +4,18 @@ import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+from utils.notas_acuerdos import separar as separar_notas_acuerdos
+
+_MENSAJE_ERROR_AUTENTICACION = (
+    'Error de autenticación Gmail.\n\n'
+    'Pasos para solucionarlo:\n'
+    '1. Ve a myaccount.google.com\n'
+    '2. Seguridad → Verificación en 2 pasos (actívala)\n'
+    '3. Seguridad → Contraseñas de aplicación\n'
+    '4. Crea una para "Agenda de Reuniones"\n'
+    '5. Usa esa contraseña (16 caracteres) en el campo "Contraseña de '
+    'aplicación" del Perfil'
+)
 
 
 def _enviar_smtp(smtp_server, smtp_port, origen, password, destino, msg):
@@ -45,14 +57,7 @@ def probar_conexion(config, callback=None):
                 callback(True, f'¡Correo de prueba enviado a {correo_destino}!')
         except smtplib.SMTPAuthenticationError:
             if callback:
-                callback(False,
-                    'Error de autenticación Gmail.\n\n'
-                    'Pasos:\n'
-                    '1. myaccount.google.com\n'
-                    '2. Seguridad → Verificación en 2 pasos\n'
-                    '3. Seguridad → Contraseñas de aplicación\n'
-                    '4. Genera una para "Agenda" y úsala aquí'
-                )
+                callback(False, _MENSAJE_ERROR_AUTENTICACION)
         except Exception as e:
             if callback:
                 callback(False, f'Error de conexión: {e}')
@@ -68,13 +73,10 @@ def _componer_acta(reunion, participantes, acuerdos_texto=''):
         for p in participantes
     ) or '  (Sin participantes registrados)'
 
-    notas = reunion.get('notas', '').strip() or '(Sin notas)'
+    notas_raw, bloque_acuerdos = separar_notas_acuerdos(reunion.get('notas', ''))
+    notas = notas_raw or '(Sin notas)'
     conclusion = reunion.get('conclusion', '').strip() or '(Sin conclusión registrada)'
-
-    acuerdos = acuerdos_texto.strip() if acuerdos_texto else ''
-    if '=== ACUERDOS ===' in notas:
-        acuerdos = notas.split('=== ACUERDOS ===')[-1].strip()
-        notas = notas.split('=== ACUERDOS ===')[0].strip() or '(Sin notas)'
+    acuerdos = bloque_acuerdos or (acuerdos_texto.strip() if acuerdos_texto else '')
 
     cuerpo = f"""
 {linea}
@@ -150,15 +152,7 @@ def enviar_acta(reunion, participantes, config, callback=None):
                 callback(True, f'Acta enviada correctamente a:\n{correo_destino}')
         except smtplib.SMTPAuthenticationError:
             if callback:
-                callback(False,
-                    'Error de autenticación Gmail.\n\n'
-                    'Pasos para solucionarlo:\n'
-                    '1. Ve a myaccount.google.com\n'
-                    '2. Seguridad → Verificación en 2 pasos (actívala)\n'
-                    '3. Seguridad → Contraseñas de aplicación\n'
-                    '4. Crea una para "Agenda de Reuniones"\n'
-                    '5. Usa esa contraseña (16 caracteres) en el campo "Contraseña de aplicación" del Perfil'
-                )
+                callback(False, _MENSAJE_ERROR_AUTENTICACION)
         except ConnectionRefusedError:
             if callback:
                 callback(False, 'No se pudo conectar al servidor SMTP.\nVerifica el servidor y el puerto.')

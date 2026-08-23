@@ -13,6 +13,8 @@ from utils.exportar import exportar_excel
 from utils.widgets import CampoOrtografico, BotonPlano
 from utils.fechas import fecha_larga
 from utils.abrir_archivo import abrir as abrir_archivo
+from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin
+from utils.dialogos import confirmar_eliminar
 
 Builder.load_string('''
 <ListaReunionesScreen>:
@@ -57,8 +59,6 @@ Builder.load_string('''
                 padding: [0, '4dp']
 ''')
 
-PAGE_SIZE = 40
-
 FILTROS = [
     ('todas',       'Todas',        (0.40, 0.40, 0.40, 1)),
     ('hoy',         'Hoy',          (0.13, 0.40, 0.75, 1)),
@@ -76,15 +76,10 @@ COLORES_ESTADO = {
 }
 
 
-class ListaReunionesScreen(MDScreen):
+class ListaReunionesScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
     _filtro_activo = 'todas'
     _busqueda = ''
-    _dialog = None
-    _scroll_retry_events = None
     _load_event = None
-    _offset = 0
-    _hay_mas = True
-    _cargando_mas = False
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -96,13 +91,10 @@ class ListaReunionesScreen(MDScreen):
         self._load_event = Clock.schedule_once(_init, 0)
 
     def on_leave(self):
-        # Ver nota completa en dashboard_screen.py.
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        self._cancelar_scroll_retries()
 
     def _construir_filtros(self):
         bar = self.ids.filtros_bar
@@ -136,75 +128,34 @@ class ListaReunionesScreen(MDScreen):
         self.cargar()
 
     def cargar(self):
-        # Trae solo la primera pagina (PAGE_SIZE) -- con miles de reuniones
-        # guardadas, traer y dibujar la tabla completa de una vez se sentia
-        # lento (medido con scripts/benchmark_carga.py). El resto se agrega
-        # con cargar_mas() al acercarse al final del scroll.
-        app = App.get_running_app()
-        self._offset = 0
-        self._hay_mas = True
-        reuniones = app.db.listar_reuniones(
-            estado=self._filtro_activo,
-            busqueda=self._busqueda or None,
-            limit=PAGE_SIZE,
-            offset=0,
-        )
+        # Trae solo la primera pagina (PantallaPaginacionMixin.PAGE_SIZE) --
+        # con miles de reuniones guardadas, traer y dibujar la tabla
+        # completa de una vez se sentia lento (medido con
+        # scripts/benchmark_carga.py). El resto se agrega via cargar_mas()
+        # (heredado del mixin) al acercarse al final del scroll.
         lista = self.ids.lista_reuniones
         lista.clear_widgets()
-        if not reuniones:
-            self._hay_mas = False
+        items = self._cargar_pagina(reset=True)
+        if not items:
             lista.add_widget(MDLabel(
                 text='Sin resultados.',
                 halign='center',
                 adaptive_height=True,
                 padding=[0, dp(20)],
             ))
-            self._forzar_scroll_arriba()
-            return
-        for r in reuniones:
-            lista.add_widget(self._crear_card(r))
-        self._offset = len(reuniones)
-        self._hay_mas = len(reuniones) == PAGE_SIZE
         self._forzar_scroll_arriba()
 
-    def _on_scroll_y(self, valor):
-        # scroll_y de MDScrollView: 1 = arriba del todo, 0 = abajo del todo.
-        # Cerca del final (<=0.15) se pide la siguiente pagina.
-        if valor <= 0.15:
-            self.cargar_mas()
-
-    def cargar_mas(self):
-        if self._cargando_mas or not self._hay_mas:
-            return
-        self._cargando_mas = True
+    def _fetch_pagina(self, limit, offset):
         app = App.get_running_app()
-        reuniones = app.db.listar_reuniones(
+        return app.db.listar_reuniones(
             estado=self._filtro_activo,
             busqueda=self._busqueda or None,
-            limit=PAGE_SIZE,
-            offset=self._offset,
+            limit=limit,
+            offset=offset,
         )
-        lista = self.ids.lista_reuniones
-        for r in reuniones:
-            lista.add_widget(self._crear_card(r))
-        self._offset += len(reuniones)
-        self._hay_mas = len(reuniones) == PAGE_SIZE
-        self._cargando_mas = False
 
-    def _forzar_scroll_arriba(self):
-        # Ver nota completa en dashboard_screen.py.
-        from kivy.clock import Clock
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
+    def _agregar_item(self, reunion):
+        self.ids.lista_reuniones.add_widget(self._crear_card(reunion))
 
     def _crear_card(self, reunion):
         color = COLORES_ESTADO.get(reunion['estado'], (0.95, 0.95, 0.95, 1))
@@ -274,24 +225,15 @@ class ListaReunionesScreen(MDScreen):
     def _confirmar_borrar(self, reunion_id):
         app = App.get_running_app()
 
-        def _borrar(_):
+        def _borrar():
             app.db.eliminar_reunion(reunion_id)
-            self._dialog.dismiss()
             self.cargar()
 
-        self._dialog = MDDialog(
-            title='Confirmar eliminación',
-            text='¿Deseas eliminar esta reunión permanentemente?',
-            buttons=[
-                MDFlatButton(text='CANCELAR', on_release=lambda x: self._dialog.dismiss()),
-                MDRaisedButton(
-                    text='ELIMINAR',
-                    md_bg_color=(0.8, 0.1, 0.1, 1),
-                    on_release=_borrar,
-                ),
-            ],
+        confirmar_eliminar(
+            'Confirmar eliminación',
+            '¿Deseas eliminar esta reunión permanentemente?',
+            _borrar,
         )
-        self._dialog.open()
 
     def exportar(self, formato):
         app = App.get_running_app()

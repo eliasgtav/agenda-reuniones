@@ -13,6 +13,7 @@ from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
 from utils.widgets import CampoMayusculas
+from utils.mixins_pantalla import ScrollArribaMixin
 
 
 class BotonQuitarParticipante(ButtonBehavior, MDIcon):
@@ -290,11 +291,9 @@ def _chip_participante(nombre, on_remove):
     return row
 
 
-class NuevaReunionScreen(MDScreen):
+class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
     _participantes = []
-    _editar_id = None
     _dictados = None
-    _scroll_retry_events = None
     _load_event = None
 
     def on_pre_enter(self):
@@ -302,13 +301,10 @@ class NuevaReunionScreen(MDScreen):
         self._load_event = Clock.schedule_once(lambda dt: self._reset_form(), 0)
 
     def on_leave(self):
-        # Ver nota completa en dashboard_screen.py.
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        self._cancelar_scroll_retries()
 
     def enfocar(self, field_id):
         self.ids[field_id].focus = True
@@ -320,7 +316,6 @@ class NuevaReunionScreen(MDScreen):
 
     def _reset_form(self):
         self._participantes = []
-        self._editar_id = None
         self.ids.asunto_field.text = ''
         self.ids.fecha_field.text = ''
         self.ids.hora_field.text = ''
@@ -330,21 +325,6 @@ class NuevaReunionScreen(MDScreen):
         self.ids.participantes_list.clear_widgets()
         self.elegir_modalidad('presencial')
         self._forzar_scroll_arriba()
-
-    def _forzar_scroll_arriba(self):
-        # Ver nota completa en dashboard_screen.py.
-        from kivy.clock import Clock
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
 
     # ── Dictado por voz ──────────────────────────────────────────────
 
@@ -370,20 +350,6 @@ class NuevaReunionScreen(MDScreen):
         no_seleccionado = (0.75, 0.75, 0.75, 1)
         self.ids.btn_presencial.md_bg_color = seleccionado if valor == 'presencial' else no_seleccionado
         self.ids.btn_virtual.md_bg_color = seleccionado if valor == 'virtual' else no_seleccionado
-
-    def cargar_para_editar(self, reunion_id):
-        app = App.get_running_app()
-        r = app.db.obtener_reunion(reunion_id)
-        if not r:
-            return
-        self._editar_id = reunion_id
-        self.ids.asunto_field.text = r['asunto']
-        self.ids.fecha_field.text = r['fecha']
-        self.ids.hora_field.text = r['hora']
-        self.ids.lugar_field.text = r['lugar'] or ''
-        self.elegir_modalidad(r['modalidad'] or 'presencial')
-        self._participantes = [p['nombre'] for p in app.db.listar_participantes(reunion_id)]
-        self._refrescar_participantes()
 
     def abrir_fecha(self):
         picker = MDDatePicker()
@@ -446,19 +412,9 @@ class NuevaReunionScreen(MDScreen):
         app = App.get_running_app()
         db = app.db
 
-        if self._editar_id:
-            db.actualizar_reunion(
-                self._editar_id,
-                asunto=asunto, fecha=fecha, hora=hora, lugar=lugar, modalidad=self._modalidad,
-            )
-            for p in db.listar_participantes(self._editar_id):
-                db.eliminar_participante(p['id'])
-            for nombre in self._participantes:
-                db.agregar_participante(self._editar_id, nombre)
-        else:
-            rid = db.crear_reunion(asunto, fecha, hora, lugar, tipos_alerta=alertas, modalidad=self._modalidad)
-            for nombre in self._participantes:
-                db.agregar_participante(rid, nombre)
+        rid = db.crear_reunion(asunto, fecha, hora, lugar, tipos_alerta=alertas, modalidad=self._modalidad)
+        for nombre in self._participantes:
+            db.agregar_participante(rid, nombre)
 
         self._mostrar_ok()
 

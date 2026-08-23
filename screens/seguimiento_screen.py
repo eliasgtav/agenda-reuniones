@@ -6,6 +6,7 @@ from kivy.metrics import dp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.label import MDLabel
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
+from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin
 
 Builder.load_string('''
 <SeguimientoScreen>:
@@ -31,84 +32,41 @@ Builder.load_string('''
                 padding: [0, '4dp']
 ''')
 
-PAGE_SIZE = 40
 
-
-class SeguimientoScreen(MDScreen):
-    _scroll_retry_events = None
+class SeguimientoScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
     _load_event = None
-    _offset = 0
-    _hay_mas = True
-    _cargando_mas = False
 
     def on_pre_enter(self):
         self._load_event = Clock.schedule_once(lambda dt: self.cargar(), 0)
 
     def on_leave(self):
-        # Ver nota completa en dashboard_screen.py.
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        self._cancelar_scroll_retries()
 
     def cargar(self):
-        # Misma logica de paginacion que lista_reuniones_screen.py: primera
-        # pagina aqui, el resto via cargar_mas() al llegar cerca del final
-        # del scroll (ver benchmark en scripts/benchmark_carga.py).
-        app = App.get_running_app()
-        self._offset = 0
-        self._hay_mas = True
-        acuerdos = app.db.listar_todos_acuerdos(limit=PAGE_SIZE, offset=0)
+        # Primera pagina aqui, el resto via cargar_mas() (heredado de
+        # PaginacionMixin) al llegar cerca del final del scroll -- ver
+        # benchmark en scripts/benchmark_carga.py.
         lista = self.ids.lista_acuerdos
         lista.clear_widgets()
-        if not acuerdos:
-            self._hay_mas = False
+        items = self._cargar_pagina(reset=True)
+        if not items:
             lista.add_widget(MDLabel(
                 text='Sin acuerdos registrados.',
                 halign='center',
                 adaptive_height=True,
                 padding=[0, dp(20)],
             ))
-            self._forzar_scroll_arriba()
-            return
-        for ac in acuerdos:
-            lista.add_widget(self._crear_card(ac))
-        self._offset = len(acuerdos)
-        self._hay_mas = len(acuerdos) == PAGE_SIZE
         self._forzar_scroll_arriba()
 
-    def _on_scroll_y(self, valor):
-        if valor <= 0.15:
-            self.cargar_mas()
-
-    def cargar_mas(self):
-        if self._cargando_mas or not self._hay_mas:
-            return
-        self._cargando_mas = True
+    def _fetch_pagina(self, limit, offset):
         app = App.get_running_app()
-        acuerdos = app.db.listar_todos_acuerdos(limit=PAGE_SIZE, offset=self._offset)
-        lista = self.ids.lista_acuerdos
-        for ac in acuerdos:
-            lista.add_widget(self._crear_card(ac))
-        self._offset += len(acuerdos)
-        self._hay_mas = len(acuerdos) == PAGE_SIZE
-        self._cargando_mas = False
+        return app.db.listar_todos_acuerdos(limit=limit, offset=offset)
 
-    def _forzar_scroll_arriba(self):
-        # Ver nota completa en dashboard_screen.py.
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
+    def _agregar_item(self, ac):
+        self.ids.lista_acuerdos.add_widget(self._crear_card(ac))
 
     def _crear_card(self, ac):
         return crear_tarjeta_acuerdo(

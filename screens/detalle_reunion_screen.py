@@ -26,6 +26,8 @@ from utils.widgets import CampoMayusculas, CampoOraciones, CampoAcuerdosNumerado
 from utils.voz import DictadoVoz
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
 from utils.fechas import fecha_larga
+from utils.mixins_pantalla import ScrollArribaMixin
+from utils.dialogos import confirmar_eliminar
 
 
 class IconoAccionCompacto(ButtonBehavior, MDIcon):
@@ -484,17 +486,13 @@ _sonido_archivo_id = None
 _sonido_btn = None
 
 
-class DetalleReunionScreen(MDScreen):
+class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     _reunion_id = None
     _nueva_fecha = None
     _nueva_hora = None
     _check_hora_event = None
-    _scroll_retry_events = None
     _load_event = None
-    _dictado_participante = None
-    _dictado_trabajo = None
-    _dictado_notas = None
-    _dictado_conclusion = None
+    _dictados = None
     _acuerdos_visibles = False
 
     def on_pre_enter(self):
@@ -513,21 +511,6 @@ class DetalleReunionScreen(MDScreen):
                 self._forzar_scroll_arriba()
         self._load_event = Clock.schedule_once(_load, 0)
 
-    def _forzar_scroll_arriba(self):
-        # Ver nota completa en dashboard_screen.py.
-        from kivy.clock import Clock
-        sv = self.ids.scroll_view
-
-        def _reset(dt=None):
-            sv.scroll_y = 1
-            sv.update_from_scroll()
-
-        _reset()
-        self._scroll_retry_events = [
-            Clock.schedule_once(_reset, delay)
-            for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
-        ]
-
     def on_leave(self):
         if self._load_event:
             self._load_event.cancel()
@@ -536,10 +519,19 @@ class DetalleReunionScreen(MDScreen):
             self._check_hora_event.cancel()
             self._check_hora_event = None
         self._detener_sonido()
-        # Ver nota completa en dashboard_screen.py.
-        for ev in (self._scroll_retry_events or []):
-            ev.cancel()
-        self._scroll_retry_events = None
+        global _grabando
+        if _grabando:
+            # _grabando/_grabacion_path son variables de modulo (no de
+            # instancia) porque solo existe una DetalleReunionScreen
+            # reutilizada para cualquier reunion via cargar() -- si se sale
+            # de la pantalla con una grabacion en curso sin detenerla aqui,
+            # al volver a abrir OTRA reunion y tocar "DETENER GRABACION" el
+            # audio se guardaba como adjunto de la reunion equivocada
+            # (self._reunion_id ya apuntaba a la nueva). Detenerla aqui
+            # mientras self._reunion_id todavia es la reunion original
+            # asegura que el archivo se adjunte a la reunion correcta.
+            self._detener_grabacion()
+        self._cancelar_scroll_retries()
 
     def _verificar_hora_reunion(self):
         if not self._reunion_id:
@@ -629,39 +621,37 @@ class DetalleReunionScreen(MDScreen):
         self.ids.nuevo_participante.text = ''
         self._cargar_participantes(db)
 
-    def toggle_voz_participante(self):
-        if self._dictado_participante is None:
-            self._dictado_participante = DictadoVoz(
-                campo=self.ids.nuevo_participante,
-                boton_mic=self.ids.participante_mic,
-                lbl_estado=self.ids.lbl_voz_participante,
+    def _toggle_voz(self, campo_id, boton_id, lbl_id, enfocar_primero=False):
+        # Antes cada campo con dictado tenia su propio metodo toggle_voz_*
+        # casi identico, con un atributo _dictado_<campo> propio -- se
+        # unifica en un dict cacheado por campo_id (mismo patron que ya
+        # usaba screens/nueva_reunion_screen.py::toggle_voz). Los 4 metodos
+        # toggle_voz_* publicos se quedan (los llama el kv de esta pantalla)
+        # pero ahora son wrappers de una linea.
+        if enfocar_primero:
+            self.ids[campo_id].focus = True
+        if self._dictados is None:
+            self._dictados = {}
+        if campo_id not in self._dictados:
+            self._dictados[campo_id] = DictadoVoz(
+                campo=self.ids[campo_id],
+                boton_mic=self.ids[boton_id],
+                lbl_estado=self.ids[lbl_id],
                 on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
             )
-        self._dictado_participante.toggle()
+        self._dictados[campo_id].toggle()
+
+    def toggle_voz_participante(self):
+        self._toggle_voz('nuevo_participante', 'participante_mic', 'lbl_voz_participante')
 
     def toggle_voz_notas(self):
-        if self._dictado_notas is None:
-            self._dictado_notas = DictadoVoz(
-                campo=self.ids.notas_field,
-                boton_mic=self.ids.notas_mic,
-                lbl_estado=self.ids.lbl_voz_notas,
-                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
-            )
-        self._dictado_notas.toggle()
+        self._toggle_voz('notas_field', 'notas_mic', 'lbl_voz_notas')
 
     def toggle_voz_conclusion(self):
         # Enfocar antes de dictar: si el campo está vacío, dispara el
         # sembrado del "1.- " (CampoAcuerdosNumerados) igual que si el
         # usuario hubiera tocado el campo para escribir a mano.
-        self.ids.conclusion_field.focus = True
-        if self._dictado_conclusion is None:
-            self._dictado_conclusion = DictadoVoz(
-                campo=self.ids.conclusion_field,
-                boton_mic=self.ids.conclusion_mic,
-                lbl_estado=self.ids.lbl_voz_conclusion,
-                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
-            )
-        self._dictado_conclusion.toggle()
+        self._toggle_voz('conclusion_field', 'conclusion_mic', 'lbl_voz_conclusion', enfocar_primero=True)
 
     def borrar_seleccion(self, field_id):
         campo = self.ids[field_id]
@@ -810,24 +800,15 @@ class DetalleReunionScreen(MDScreen):
                 pass
 
     def _borrar_archivo(self, aid):
-        def _confirmar(_):
-            dialog.dismiss()
+        def _confirmar():
             App.get_running_app().db.eliminar_archivo(aid)
             self.cargar()
 
-        dialog = MDDialog(
-            title='Eliminar archivo',
-            text='¿Estás seguro de que deseas eliminar este archivo adjunto? Esta acción no se puede deshacer.',
-            buttons=[
-                MDFlatButton(text='CANCELAR', on_release=lambda x: dialog.dismiss()),
-                MDRaisedButton(
-                    text='ELIMINAR',
-                    md_bg_color=(0.8, 0.1, 0.1, 1),
-                    on_release=_confirmar,
-                ),
-            ],
+        confirmar_eliminar(
+            'Eliminar archivo',
+            '¿Estás seguro de que deseas eliminar este archivo adjunto? Esta acción no se puede deshacer.',
+            _confirmar,
         )
-        dialog.open()
 
     def adjuntar_archivo(self):
         if platform == 'android':
@@ -929,14 +910,7 @@ class DetalleReunionScreen(MDScreen):
         self.ids.lbl_voz_estado.text = ''
 
     def toggle_voz_trabajo(self):
-        if self._dictado_trabajo is None:
-            self._dictado_trabajo = DictadoVoz(
-                campo=self.ids.trabajo_field,
-                boton_mic=self.ids.btn_mic,
-                lbl_estado=self.ids.lbl_voz_estado,
-                on_permiso_denegado=lambda msg: self._mostrar_info('Permiso', msg),
-            )
-        self._dictado_trabajo.toggle()
+        self._toggle_voz('trabajo_field', 'btn_mic', 'lbl_voz_estado')
 
     # ── Notas ─────────────────────────────────────────────────────────
 
@@ -986,24 +960,15 @@ class DetalleReunionScreen(MDScreen):
         self._cargar_acuerdos_plazo()
 
     def _eliminar_acuerdo_plazo(self, acuerdo_id):
-        def _borrar(_):
+        def _borrar():
             App.get_running_app().db.eliminar_acuerdo(acuerdo_id)
-            self._dlg_confirmar_acuerdo.dismiss()
             self._cargar_acuerdos_plazo()
 
-        self._dlg_confirmar_acuerdo = MDDialog(
-            title='Confirmar eliminación',
-            text='¿Deseas eliminar este acuerdo permanentemente?',
-            buttons=[
-                MDFlatButton(text='CANCELAR', on_release=lambda x: self._dlg_confirmar_acuerdo.dismiss()),
-                MDRaisedButton(
-                    text='ELIMINAR',
-                    md_bg_color=(0.8, 0.1, 0.1, 1),
-                    on_release=_borrar,
-                ),
-            ],
+        confirmar_eliminar(
+            'Confirmar eliminación',
+            '¿Deseas eliminar este acuerdo permanentemente?',
+            _borrar,
         )
-        self._dlg_confirmar_acuerdo.open()
 
     def _set_prioridad_nuevo_acuerdo(self, clave):
         self._prioridad_nuevo_acuerdo = clave
@@ -1057,6 +1022,48 @@ class DetalleReunionScreen(MDScreen):
     def _editar_acuerdo_plazo(self, acuerdo):
         self._abrir_dialogo_acuerdo(acuerdo)
 
+    def _crear_campo_con_voz(self, hint_text, etiqueta, multiline=False, height=None):
+        """Crea un CampoOraciones con fila de iconos (mic + borrador,
+        dictado por voz ya conectado) debajo del hint. Devuelve (campo,
+        lbl_voz, fila_iconos) -- el llamador puede seguir agregando iconos a
+        fila_iconos (ej. "traer acuerdo", selector de responsable) antes de
+        montarla en el diálogo. Antes este bloque de ~25 líneas se repetía
+        tal cual para el campo de texto y el de responsable."""
+        kwargs = dict(hint_text=hint_text, mode='rectangle')
+        if multiline:
+            kwargs['multiline'] = True
+        if height is not None:
+            kwargs['size_hint_y'] = None
+            kwargs['height'] = height
+        campo = CampoOraciones(**kwargs)
+        lbl_voz = MDLabel(
+            text='', font_style='Caption', halign='center',
+            size_hint_y=None, height=dp(16),
+            theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
+        )
+        btn_mic = IconoAccionCompacto(
+            icon='microphone', theme_text_color='Custom',
+            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
+        )
+        btn_borrar = IconoAccionCompacto(
+            icon='eraser', size_hint=(None, None), size=(dp(24), dp(24)),
+            pos_hint={'center_y': 0.5},
+        )
+        dictado = DictadoVoz(campo=campo, boton_mic=btn_mic, lbl_estado=lbl_voz)
+        btn_mic.bind(on_release=lambda _: dictado.toggle())
+        btn_borrar.bind(
+            on_press=lambda _: campo.delete_selection() if campo.selection_text else None
+        )
+        fila_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+        fila_iconos.add_widget(MDLabel(
+            text=etiqueta, font_style='Caption', adaptive_height=True,
+            theme_text_color='Secondary', pos_hint={'center_y': 0.5},
+        ))
+        fila_iconos.add_widget(btn_mic)
+        fila_iconos.add_widget(btn_borrar)
+        return campo, lbl_voz, fila_iconos
+
     def _abrir_dialogo_acuerdo(self, acuerdo):
         from kivymd.uix.textfield import MDTextField as TF
         from kivymd.uix.menu import MDDropdownMenu
@@ -1065,28 +1072,9 @@ class DetalleReunionScreen(MDScreen):
         participantes = [p['nombre'] for p in app.db.listar_participantes(self._reunion_id)]
         self._prioridad_nuevo_acuerdo = acuerdo.get('prioridad', 'media') if acuerdo else 'media'
 
-        campo_texto = CampoOraciones(
-            hint_text='Descripción del acuerdo (uno por línea)',
-            mode='rectangle', multiline=True, size_hint_y=None, height=dp(90),
-        )
-        lbl_voz_texto = MDLabel(
-            text='', font_style='Caption', halign='center',
-            size_hint_y=None, height=dp(16),
-            theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
-        )
-        btn_mic_texto = IconoAccionCompacto(
-            icon='microphone', theme_text_color='Custom',
-            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
-            pos_hint={'center_y': 0.5},
-        )
-        btn_borrar_texto = IconoAccionCompacto(
-            icon='eraser', size_hint=(None, None), size=(dp(24), dp(24)),
-            pos_hint={'center_y': 0.5},
-        )
-        dictado_texto = DictadoVoz(campo=campo_texto, boton_mic=btn_mic_texto, lbl_estado=lbl_voz_texto)
-        btn_mic_texto.bind(on_release=lambda _: dictado_texto.toggle())
-        btn_borrar_texto.bind(
-            on_press=lambda _: campo_texto.delete_selection() if campo_texto.selection_text else None
+        campo_texto, lbl_voz_texto, fila_texto_iconos = self._crear_campo_con_voz(
+            'Descripción del acuerdo (uno por línea)', 'Descripción del acuerdo',
+            multiline=True, height=dp(90),
         )
         btn_traer_texto = IconoAccionCompacto(
             icon='database-import-outline', theme_text_color='Custom',
@@ -1094,42 +1082,11 @@ class DetalleReunionScreen(MDScreen):
             pos_hint={'center_y': 0.5},
         )
         btn_traer_texto.bind(on_release=lambda _: self._abrir_menu_traer_acuerdo(btn_traer_texto, campo_texto))
-        fila_texto_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
-        fila_texto_iconos.add_widget(MDLabel(
-            text='Descripción del acuerdo', font_style='Caption', adaptive_height=True,
-            theme_text_color='Secondary', pos_hint={'center_y': 0.5},
-        ))
-        fila_texto_iconos.add_widget(btn_mic_texto)
-        fila_texto_iconos.add_widget(btn_borrar_texto)
         fila_texto_iconos.add_widget(btn_traer_texto)
 
-        campo_resp = CampoOraciones(hint_text='Responsable (opcional)', mode='rectangle')
-        lbl_voz_resp = MDLabel(
-            text='', font_style='Caption', halign='center',
-            size_hint_y=None, height=dp(16),
-            theme_text_color='Custom', text_color=(0.13, 0.55, 0.13, 1),
+        campo_resp, lbl_voz_resp, fila_resp_iconos = self._crear_campo_con_voz(
+            'Responsable (opcional)', 'Responsable',
         )
-        btn_mic_resp = IconoAccionCompacto(
-            icon='microphone', theme_text_color='Custom',
-            text_color=(0.13, 0.40, 0.75, 1), size_hint=(None, None), size=(dp(24), dp(24)),
-            pos_hint={'center_y': 0.5},
-        )
-        btn_borrar_resp = IconoAccionCompacto(
-            icon='eraser', size_hint=(None, None), size=(dp(24), dp(24)),
-            pos_hint={'center_y': 0.5},
-        )
-        dictado_resp = DictadoVoz(campo=campo_resp, boton_mic=btn_mic_resp, lbl_estado=lbl_voz_resp)
-        btn_mic_resp.bind(on_release=lambda _: dictado_resp.toggle())
-        btn_borrar_resp.bind(
-            on_press=lambda _: campo_resp.delete_selection() if campo_resp.selection_text else None
-        )
-        fila_resp_iconos = MDBoxLayout(adaptive_height=True, spacing=dp(4))
-        fila_resp_iconos.add_widget(MDLabel(
-            text='Responsable', font_style='Caption', adaptive_height=True,
-            theme_text_color='Secondary', pos_hint={'center_y': 0.5},
-        ))
-        fila_resp_iconos.add_widget(btn_mic_resp)
-        fila_resp_iconos.add_widget(btn_borrar_resp)
         campo_plazo = TF(hint_text='Plazo', mode='rectangle', size_hint_x=.5)
         campo_plazo.bind(on_focus=lambda inst, val: self._abrir_cal_acuerdo(inst, campo_plazo) if val else None)
         btn_cal_plazo = MDIconButton(icon='calendar', size_hint_x=None, width=dp(40))
@@ -1373,9 +1330,19 @@ class DetalleReunionScreen(MDScreen):
             _grabacion_path = os.path.join(dest_dir, f'reunion_{ts}.{ext}')
             audio.file_path = _grabacion_path
             audio.start()
-            _grabando = True
-            self.ids.btn_grabar.text = 'DETENER GRABACIÓN'
-            self.ids.btn_grabar.md_bg_color = (0.8, 0.1, 0.1, 1)
+        except Exception as e:
+            self._mostrar_info('Grabación', f'No disponible: {e}')
+            return
+
+        # A partir de aqui el audio YA esta grabando de verdad. Lo que sigue
+        # (auto-respuesta SMS, silenciar timbre) es funcionalidad auxiliar en
+        # su propio try aparte -- antes un error ahi disparaba "Grabación: No
+        # disponible" con la grabación real ya corriendo, mensaje enganoso.
+        _grabando = True
+        self.ids.btn_grabar.text = 'DETENER GRABACIÓN'
+        self.ids.btn_grabar.md_bg_color = (0.8, 0.1, 0.1, 1)
+
+        try:
             from utils.config import cargar as cargar_config
             from utils import llamadas, silenciador
             mensaje = cargar_config().get('sms_auto_respuesta', '')
@@ -1386,7 +1353,11 @@ class DetalleReunionScreen(MDScreen):
             elif platform == 'android':
                 Clock.schedule_once(lambda dt: self._pedir_permiso_silencio(), 0)
         except Exception as e:
-            self._mostrar_info('Grabación', f'No disponible: {e}')
+            self._mostrar_info(
+                'Grabación iniciada',
+                'La grabación ya está en curso, pero no se pudo activar el '
+                f'silenciador de llamadas ni la auto-respuesta SMS: {e}',
+            )
 
     def _pedir_permiso_silencio(self):
         def _ir_a_configuracion(_x):

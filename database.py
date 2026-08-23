@@ -94,6 +94,7 @@ class Database:
                     estado      TEXT    DEFAULT 'pendiente',
                     prioridad   TEXT    DEFAULT 'media',
                     alerta_enviada INTEGER DEFAULT 0,
+                    ultima_alerta  TEXT    DEFAULT '',
                     created_at  TEXT    DEFAULT (datetime('now','localtime')),
                     FOREIGN KEY (reunion_id) REFERENCES reuniones(id) ON DELETE CASCADE
                 );
@@ -126,6 +127,7 @@ class Database:
                 "ALTER TABLE acuerdos ADD COLUMN estado TEXT DEFAULT 'pendiente'",
                 "ALTER TABLE acuerdos ADD COLUMN prioridad TEXT DEFAULT 'media'",
                 "ALTER TABLE acuerdos ADD COLUMN plazo_hora TEXT DEFAULT ''",
+                "ALTER TABLE acuerdos ADD COLUMN ultima_alerta TEXT DEFAULT ''",
             ):
                 try:
                     conn.execute(ddl)
@@ -261,22 +263,29 @@ class Database:
     # ── Alertas ────────────────────────────────────────────────────────────────
 
     def auto_cancelar_vencidas(self):
-        # Solo cancela reuniones que lleven más de 1 hora sin iniciarse
-        limite = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M')
+        # Solo cancela reuniones que lleven más de 1 hora sin iniciarse.
+        # `(fecha || ' ' || hora) < ?` (como estaba antes) impide usar
+        # idx_reuniones_fecha/idx_reuniones_estado -- ningun indice cubre el
+        # resultado de concatenar dos columnas en tiempo de consulta, asi que
+        # esto corria como recorrido completo cada 60s
+        # (main.py::_check_alertas). Separar fecha/hora en la condicion deja
+        # ambas columnas comparables tal cual, sargable para los indices.
+        limite_dt = datetime.now() - timedelta(hours=1)
+        limite_fecha = limite_dt.strftime('%Y-%m-%d')
+        limite_hora = limite_dt.strftime('%H:%M')
+        cond = '''estado = 'pendiente'
+                  AND (fecha < ? OR (fecha = ? AND hora < ?))'''
+        params = (limite_fecha, limite_fecha, limite_hora)
         with self._conn() as conn:
-            vencidas = conn.execute('''
-                SELECT asunto FROM reuniones
-                WHERE estado = 'pendiente'
-                  AND (fecha || ' ' || hora) < ?
-            ''', (limite,)).fetchall()
+            vencidas = conn.execute(
+                f'SELECT asunto FROM reuniones WHERE {cond}', params
+            ).fetchall()
             if vencidas:
-                conn.execute('''
-                    UPDATE reuniones
-                    SET estado = 'cancelada',
-                        updated_at = datetime('now','localtime')
-                    WHERE estado = 'pendiente'
-                      AND (fecha || ' ' || hora) < ?
-                ''', (limite,))
+                conn.execute(
+                    f"UPDATE reuniones SET estado = 'cancelada', "
+                    f"updated_at = datetime('now','localtime') WHERE {cond}",
+                    params,
+                )
             return [r['asunto'] for r in vencidas]
 
     def alertas_pendientes(self):
@@ -365,19 +374,23 @@ class Database:
             return row['c'] if row else 0
 
     def acuerdos_con_plazo_pendientes(self):
-        hoy = datetime.now().strftime('%Y-%m-%d')
+        # ultima_alerta != 'vencido' (no alerta_enviada=0) -- un acuerdo debe
+        # poder seguir apareciendo aqui tras avisar "vence manana"/"vence
+        # HOY", para que verificar_plazos_acuerdos() lo vuelva a notificar
+        # cuando cambie de categoria. "vencido" es terminal, ahi si se deja
+        # de traer. Ver utils/notificaciones.py::verificar_plazos_acuerdos.
         manana = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
         with self._conn() as conn:
             rows = conn.execute('''
-                SELECT a.id, a.texto, a.plazo, a.alerta_enviada, a.responsable,
+                SELECT a.id, a.texto, a.plazo, a.ultima_alerta, a.responsable,
                        r.asunto as reunion_asunto
                 FROM acuerdos a
                 JOIN reuniones r ON r.id = a.reunion_id
-                WHERE a.plazo != '' AND a.alerta_enviada = 0 AND a.estado != 'completado'
+                WHERE a.plazo != '' AND a.ultima_alerta != 'vencido' AND a.estado != 'completado'
                   AND a.plazo <= ?
             ''', (manana,)).fetchall()
             return [dict(r) for r in rows]
 
-    def marcar_alerta_acuerdo_enviada(self, acuerdo_id):
+    def marcar_alerta_acuerdo_enviada(self, acuerdo_id, categoria):
         with self._conn() as conn:
-            conn.execute('UPDATE acuerdos SET alerta_enviada=1 WHERE id=?', (acuerdo_id,))
+            conn.execute('UPDATE acuerdos SET ultima_alerta=? WHERE id=?', (categoria, acuerdo_id))

@@ -68,6 +68,18 @@ def _notificar(titulo, mensaje):
         pass
 
 
+def _saludo_usuario():
+    partes_nombre = cargar_config().get('nombres', '').split()
+    primer_nombre = partes_nombre[0] if partes_nombre else ''
+    return f'{primer_nombre}, ' if primer_nombre else ''
+
+
+def _avisar(titulo_push, msg_push, texto_voz):
+    # Push y voz siempre van juntos en este modulo -- nunca uno sin el otro.
+    _notificar(titulo_push, msg_push)
+    _hablar(texto_voz)
+
+
 UMBRALES = {
     '30min': (5, 15),
     '1hora': (10, 20),
@@ -97,25 +109,24 @@ class NotificacionesManager:
             if lo <= minutos <= hi:
                 asunto = alerta['asunto']
                 cuando = MENSAJES[tipo]
-                partes_nombre = cargar_config().get('nombres', '').split()
-                primer_nombre = partes_nombre[0] if partes_nombre else ''
-                saludo = f'{primer_nombre}, ' if primer_nombre else ''
-                titulo = f'Reunión próxima — {cuando}'
-                msg = f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}'
-                _notificar(titulo, msg)
-                _hablar(
-                    f'{saludo}tiene una reunión {cuando}. '
-                    f'Asunto: {asunto}.'
+                _avisar(
+                    f'Reunión próxima — {cuando}',
+                    f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}',
+                    f'{_saludo_usuario()}tiene una reunión {cuando}. Asunto: {asunto}.',
                 )
                 self.db.marcar_alerta_enviada(alerta['id'])
         self.verificar_plazos_acuerdos()
 
     def verificar_plazos_acuerdos(self):
+        # Cada acuerdo avisa hasta 3 veces conforme se acerca su plazo
+        # (manana -> hoy -> vencido), nunca la misma categoria dos veces --
+        # antes se marcaba "ya avisado" tras la PRIMERA notificacion sin
+        # importar cual, asi que un acuerdo que avisaba "vence manana" nunca
+        # volvia a avisar cuando de verdad vencia. `ultima_alerta` guarda que
+        # categoria fue la ultima notificada; "vencido" es terminal.
         from datetime import datetime
         hoy = datetime.now().strftime('%Y-%m-%d')
-        partes_nombre = cargar_config().get('nombres', '').split()
-        primer_nombre = partes_nombre[0] if partes_nombre else ''
-        saludo = f'{primer_nombre}, ' if primer_nombre else ''
+        saludo = _saludo_usuario()
 
         for acuerdo in self.db.acuerdos_con_plazo_pendientes():
             plazo = acuerdo['plazo']
@@ -125,18 +136,24 @@ class NotificacionesManager:
             quien = f' asignado a {responsable}' if responsable else ''
 
             if plazo < hoy:
+                categoria = 'vencido'
                 estado = 'VENCIDO'
                 voz = f'{saludo}acuerdo vencido{quien} de la reunión {reunion}: {texto}'
             elif plazo == hoy:
+                categoria = 'hoy'
                 estado = 'vence HOY'
                 voz = f'{saludo}acuerdo que vence hoy{quien} de la reunión {reunion}: {texto}'
             else:
+                categoria = 'manana'
                 estado = 'vence mañana'
                 voz = f'{saludo}acuerdo que vence mañana{quien} de la reunión {reunion}: {texto}'
 
-            _notificar(
+            if categoria == acuerdo.get('ultima_alerta', ''):
+                continue
+
+            _avisar(
                 f'Acuerdo {estado}',
-                f'{texto}\nReunión: {reunion}\nPlazo: {plazo}'
+                f'{texto}\nReunión: {reunion}\nPlazo: {plazo}',
+                voz,
             )
-            _hablar(voz)
-            self.db.marcar_alerta_acuerdo_enviada(acuerdo['id'])
+            self.db.marcar_alerta_acuerdo_enviada(acuerdo['id'], categoria)

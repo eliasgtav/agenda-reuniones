@@ -1,11 +1,9 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
-import threading
 from datetime import datetime
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
-from kivy.utils import platform
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -14,6 +12,8 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.card import MDCard
 from utils.widgets import CampoOrtografico
 from utils.fechas import fecha_larga
+from utils.voz import DictadoVoz
+from utils.notas_acuerdos import separar as separar_notas_acuerdos, MARCADOR as MARCADOR_ACUERDOS
 
 Builder.load_string('''
 <EnReunionScreen>:
@@ -173,7 +173,6 @@ Builder.load_string('''
 class EnReunionScreen(MDScreen):
     _reunion_id = None
     _acuerdos = []
-    _escuchando = False
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -195,9 +194,8 @@ class EnReunionScreen(MDScreen):
                 self.ids.lbl_asunto_activo.text = r['asunto']
                 self.ids.lbl_hora_activa.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
                 # Cargar acuerdos previos desde notas si hay
-                notas = r.get('notas', '')
-                if '=== ACUERDOS ===' in notas:
-                    bloque = notas.split('=== ACUERDOS ===')[-1].strip()
+                _, bloque = separar_notas_acuerdos(r.get('notas', ''))
+                if bloque:
                     for linea in bloque.split('\n'):
                         linea = linea.strip()
                         if linea.startswith('•'):
@@ -289,11 +287,25 @@ class EnReunionScreen(MDScreen):
         if not self._acuerdos:
             self._mostrar('Aviso', 'No hay acuerdos para guardar.')
             return
+        n = self._guardar_acuerdos_en_bd()
+        self._refrescar_lista()
+        self._mostrar('Guardado', f'{n} acuerdo(s) guardados en las notas de la reunión.')
+
+    def _guardar_acuerdos_en_bd(self):
+        """Vuelca self._acuerdos a la BD (notas + tabla acuerdos con plazo)
+        y limpia la lista en memoria. Separado de guardar_en_notas() para
+        poder llamarlo en silencio desde on_leave() -- antes los acuerdos
+        capturados en vivo solo vivian en memoria hasta tocar "GUARDAR EN
+        NOTAS" a mano, sin autoguardado ni aviso: una llamada entrante, el
+        telefono trabandose, o tocar VOLVER/atras por error a media reunion
+        perdia todo lo capturado sin ninguna advertencia."""
+        if not self._acuerdos or not self._reunion_id:
+            return 0
         app = App.get_running_app()
         r = app.db.obtener_reunion(self._reunion_id)
-        notas_prev = r.get('notas', '') or ''
-        if '=== ACUERDOS ===' in notas_prev:
-            notas_prev = notas_prev.split('=== ACUERDOS ===')[0].rstrip()
+        if not r:
+            return 0
+        notas_prev, _ = separar_notas_acuerdos(r.get('notas', ''))
         textos = []
         for a in self._acuerdos:
             if isinstance(a, dict):
@@ -302,92 +314,36 @@ class EnReunionScreen(MDScreen):
                     app.db.guardar_acuerdo(self._reunion_id, a['texto'], a['plazo'], a.get('responsable', ''))
             else:
                 textos.append(a)
-        bloque = '\n\n=== ACUERDOS ===\n' + '\n'.join(f'• {t}' for t in textos)
+        bloque = f'\n\n{MARCADOR_ACUERDOS}\n' + '\n'.join(f'• {t}' for t in textos)
         nuevas_notas = (notas_prev + bloque).strip()
         app.db.actualizar_reunion(self._reunion_id, notas=nuevas_notas)
-        self._mostrar('Guardado', f'{len(self._acuerdos)} acuerdo(s) guardados en las notas de la reunión.')
+        n = len(self._acuerdos)
+        self._acuerdos = []
+        return n
+
+    def on_leave(self):
+        self._guardar_acuerdos_en_bd()
 
     # ── Voz ──────────────────────────────────────────────────────────
+    # Antes esta pantalla reimplementaba el dictado desde cero (duplicando
+    # utils/voz.py::DictadoVoz, que ya usan Nueva Reunión/Detalle/Perfil/
+    # Login) y encima reasignaba entrada_field.text directo en vez de
+    # insert_text() -- funciona hoy porque entrada_field no tiene
+    # transformaciones propias, pero es el mismo tipo de atajo que costó
+    # varias iteraciones arreglar en otros campos (ver CampoAcuerdosNumerados
+    # en memoria del proyecto). Se unifica con la clase compartida.
+
+    _dictado = None
 
     def toggle_voz(self):
-        if self._escuchando:
-            return
-        self._escuchando = True
-        self.ids.btn_mic.icon_color = (0.8, 0.1, 0.1, 1)
-        self.ids.lbl_estado_voz.text = '🎤 Escuchando... habla ahora'
-        if platform == 'android':
-            # speech_recognition + PyAudio son librerias de escritorio, no
-            # estan en buildozer.spec (PyAudio/portaudio no compila bien
-            # para Android). En el telefono se usa la API nativa de Android
-            # via plyer.stt.
-            self._escuchar_voz_android()
-        else:
-            threading.Thread(target=self._escuchar_voz, daemon=True).start()
-
-    def _escuchar_voz_android(self):
-        try:
-            from plyer import stt
-            if not stt.exist():
-                self._voz_error('Este dispositivo no tiene reconocimiento de voz disponible.')
-                return
-            stt._language = 'es-ES'  # el setter publico de plyer solo acepta en-US/pl-PL
-            stt.prefer_offline = False
-            stt.start()
-            Clock.schedule_interval(self._revisar_stt_android, 0.3)
-        except Exception as e:
-            self._voz_error(f'Error: {e}')
-
-    def _revisar_stt_android(self, dt):
-        from plyer import stt
-        if stt.listening:
-            return
-        Clock.unschedule(self._revisar_stt_android)
-        if stt.errors:
-            err = stt.errors[-1]
-            stt.errors = []
-            if 'no_match' in err or 'speech_timeout' in err:
-                self._voz_error('No se detectó voz. Intenta de nuevo.')
-            else:
-                self._voz_error(f'Error: {err}')
-            return
-        if stt.results:
-            texto = stt.results[0]
-            stt.results = []
-            self._insertar_voz(texto)
-        else:
-            self._voz_error('No se detectó voz.')
-
-    def _escuchar_voz(self):
-        from kivy.clock import Clock
-        try:
-            import speech_recognition as sr
-            r = sr.Recognizer()
-            r.pause_threshold = 1.5
-            with sr.Microphone() as source:
-                r.adjust_for_ambient_noise(source, duration=0.5)
-                audio = r.listen(source, timeout=10, phrase_time_limit=60)
-            texto = r.recognize_google(audio, language='es-ES')
-            Clock.schedule_once(lambda dt: self._insertar_voz(texto), 0)
-        except Exception as e:
-            msg = {
-                'WaitTimeoutError': 'Tiempo agotado. No se detectó voz.',
-                'UnknownValueError': 'No se entendió. Intenta de nuevo.',
-                'RequestError': 'Sin conexión a internet.',
-            }.get(type(e).__name__, f'Error: {e}')
-            Clock.schedule_once(lambda dt: self._voz_error(msg), 0)
-
-    def _insertar_voz(self, texto):
-        actual = self.ids.entrada_field.text
-        sep = ' ' if actual and not actual.endswith('\n') else ''
-        self.ids.entrada_field.text = (actual + sep + texto).strip()
-        self.ids.lbl_estado_voz.text = f'✓ "{texto[:60]}..."' if len(texto) > 60 else f'✓ "{texto}"'
-        self.ids.btn_mic.icon_color = (0.13, 0.40, 0.75, 1)
-        self._escuchando = False
-
-    def _voz_error(self, msg):
-        self.ids.lbl_estado_voz.text = f'⚠ {msg}'
-        self.ids.btn_mic.icon_color = (0.13, 0.40, 0.75, 1)
-        self._escuchando = False
+        if self._dictado is None:
+            self._dictado = DictadoVoz(
+                campo=self.ids.entrada_field,
+                boton_mic=self.ids.btn_mic,
+                lbl_estado=self.ids.lbl_estado_voz,
+                on_permiso_denegado=lambda msg: self._mostrar('Permiso requerido', msg),
+            )
+        self._dictado.toggle()
 
     def _mostrar(self, titulo, texto):
         dialog = MDDialog(

@@ -177,7 +177,13 @@ def _obtener_barra():
 _DEBUG_TECLADO = False
 
 
-def _log_teclado(mensaje):
+def _log_teclado(mensaje_fn):
+    # mensaje_fn es una funcion (normalmente `lambda: f'...'`), no un string
+    # ya armado -- con _DEBUG_TECLADO en False (el caso normal en
+    # produccion) esto evita construir los f-strings de diagnostico en CADA
+    # tecla presionada en CUALQUIER campo de texto de la app (todos heredan
+    # de CampoOrtografico). Antes el string se armaba siempre en el
+    # call site, sin importar que _log_teclado lo fuera a descartar.
     if not _DEBUG_TECLADO:
         return
     try:
@@ -186,7 +192,7 @@ def _log_teclado(mensaje):
         import os
         ruta = os.path.join(app_storage_path(), 'teclado_debug.log')
         with open(ruta, 'a', encoding='utf-8') as f:
-            f.write(f'[{datetime.now().isoformat()}] {mensaje}\n')
+            f.write(f'[{datetime.now().isoformat()}] {mensaje_fn()}\n')
     except Exception:
         pass
 
@@ -210,9 +216,9 @@ def _restart_input_android(_dt=None):
         vista = activity.getCurrentFocus() or activity.getWindow().getDecorView()
         imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
         imm.restartInput(vista)
-        _log_teclado(f'_restart_input_android OK vista={vista!r}')
+        _log_teclado(lambda: f'_restart_input_android OK vista={vista!r}')
     except Exception as e:
-        _log_teclado(f'_restart_input_android EXCEPCION {e!r}')
+        _log_teclado(lambda: f'_restart_input_android EXCEPCION {e!r}')
 
 
 def _programar_restart_input():
@@ -325,14 +331,14 @@ class CampoOrtografico(MDTextField):
         # palabra en curso, ANTES de que se confirme -- ver
         # keyboard_on_textinput abajo. Instrumentado (sin tocar lógica)
         # para ver la secuencia real de eventos en dispositivo.
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} window_on_textedit IN text={text!r} '
             f'ime_comp_antes={self._ime_composition!r} '
             f'ime_cursor_antes={self._ime_cursor!r} '
             f'texto_antes={self.text!r} cursor_antes={self.cursor!r}'
         )
         super().window_on_textedit(window, text)
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} window_on_textedit OUT '
             f'ime_comp_despues={self._ime_composition!r} '
             f'ime_cursor_despues={self._ime_cursor!r} '
@@ -350,20 +356,20 @@ class CampoOrtografico(MDTextField):
         # queda duplicada ("holahola"). Bug real reportado por el
         # usuario y reproducido con un script aislado: commitText('Hola ')
         # sobre una composición 'hola' sin limpiar daba 'holaHola '.
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} keyboard_on_textinput IN text={text!r} '
             f'ime_comp_antes={self._ime_composition!r} '
             f'ime_cursor_antes={self._ime_cursor!r} '
             f'texto_antes={self.text!r} cursor_antes={self.cursor!r}'
         )
         self._limpiar_residuo_ime()
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} keyboard_on_textinput tras_limpiar_residuo '
             f'texto={self.text!r} cursor={self.cursor!r}'
         )
         super().keyboard_on_textinput(window, text)
         self._ime_composition = ''
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} keyboard_on_textinput OUT '
             f'texto_despues={self.text!r} cursor_despues={self.cursor!r}'
         )
@@ -372,7 +378,7 @@ class CampoOrtografico(MDTextField):
         comp = self._ime_composition
         cursor_comp = self._ime_cursor
         if not comp or not cursor_comp:
-            _log_teclado(
+            _log_teclado(lambda:
                 f'{self._id_log()} _limpiar_residuo_ime SKIP '
                 f'(comp={comp!r} cursor_comp={cursor_comp!r})'
             )
@@ -380,14 +386,14 @@ class CampoOrtografico(MDTextField):
         pcc, pcr = cursor_comp
         lines = self._lines
         if pcr >= len(lines):
-            _log_teclado(
+            _log_teclado(lambda:
                 f'{self._id_log()} _limpiar_residuo_ime SKIP '
                 f'(pcr={pcr!r} fuera de rango, len(lines)={len(lines)!r})'
             )
             return
         linea = lines[pcr]
         if linea[pcc - len(comp):pcc] != comp:
-            _log_teclado(
+            _log_teclado(lambda:
                 f'{self._id_log()} _limpiar_residuo_ime SKIP '
                 f'(linea[{pcc - len(comp)}:{pcc}]={linea[pcc - len(comp):pcc]!r} '
                 f'!= comp={comp!r})'
@@ -399,7 +405,7 @@ class CampoOrtografico(MDTextField):
             "insert", *self._get_line_from_cursor(pcr, nueva_linea)
         )
         self.cursor = self.get_cursor_from_index(max(0, ci - len(comp)))
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} _limpiar_residuo_ime APLICADO '
             f'comp={comp!r} linea_antes={linea!r} linea_despues={nueva_linea!r}'
         )
@@ -413,7 +419,7 @@ class CampoOrtografico(MDTextField):
         texto_antes = self.text
         cursor_antes = self.cursor
         resultado = super().insert_text(substring, from_undo=from_undo)
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} insert_text substring={substring!r} '
             f'from_undo={from_undo!r} texto_antes={texto_antes!r} '
             f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '
@@ -435,14 +441,14 @@ class CampoOrtografico(MDTextField):
         # anterior. Se loguea el texto crudo tal cual llega (repr, para ver
         # los caracteres de control si los hay) antes de que Kivy lo
         # interprete.
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} keyboard_on_key_down IN keycode={keycode!r} '
             f'text={text!r} modifiers={modifiers!r} '
             f'texto_antes={self.text!r} cursor_antes={self.cursor!r} '
             f'seleccion_antes=({self._selection_from!r},{self._selection_to!r})'
         )
         resultado = super().keyboard_on_key_down(window, keycode, text, modifiers)
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} keyboard_on_key_down OUT '
             f'texto_despues={self.text!r} cursor_despues={self.cursor!r} '
             f'seleccion_despues=({self._selection_from!r},{self._selection_to!r})'
@@ -456,7 +462,7 @@ class CampoOrtografico(MDTextField):
         resultado = super().delete_selection(from_undo=from_undo)
         if self.text != texto_antes:
             _programar_restart_input()
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} delete_selection from_undo={from_undo!r} '
             f'seleccion={seleccion!r} texto_antes={texto_antes!r} '
             f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '
@@ -470,7 +476,7 @@ class CampoOrtografico(MDTextField):
         resultado = super().do_backspace(from_undo=from_undo, mode=mode)
         if self.text != texto_antes:
             _programar_restart_input()
-        _log_teclado(
+        _log_teclado(lambda:
             f'{self._id_log()} do_backspace from_undo={from_undo!r} '
             f'mode={mode!r} texto_antes={texto_antes!r} '
             f'cursor_antes={cursor_antes!r} texto_despues={self.text!r} '

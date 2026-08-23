@@ -7,6 +7,7 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
 from utils.widgets import CampoMayusculas, BotonPlano
+from utils.perfil import iniciales_de
 
 Builder.load_string('''
 <LoginScreen>:
@@ -111,7 +112,7 @@ class LoginScreen(MDScreen):
     def _actualizar_iniciales(self):
         nombres = self.ids.nombres_field.text.strip()
         apellidos = self.ids.apellidos_field.text.strip()
-        self.ids.iniciales_lbl.text = (nombres[:1] + apellidos[:1]).upper()
+        self.ids.iniciales_lbl.text = iniciales_de(nombres, apellidos)
 
     def ingresar(self):
         nombres = self.ids.nombres_field.text.strip()
