@@ -129,6 +129,23 @@ MDBoxLayout:
 
     ScreenManager:
         id: sm
+        # MDScreen (KivyMD 1.2.0) no pinta fondo propio -- las zonas sin
+        # widgets dependen por completo de Window.clearcolor. En algunos
+        # GPU/ROM de Android eso deja ver un frame viejo (la pantalla
+        # anterior) detras de esas zonas transparentes, reportado por el
+        # usuario en capturas y confirmado a simple vista en el celular
+        # (en Windows las transiciones salen limpias, asi que no es un bug
+        # de ScreenManager/KV). Un Rectangle opaco propio del ScreenManager,
+        # repintado cada frame en vez de depender solo del clear global,
+        # cubre esas zonas con contenido siempre fresco. bg_normal usa el
+        # mismo color que set_clearcolor_by_theme_style() (kivymd/theming.py)
+        # -- no se nota el cambio y sigue sincronizado con claro/oscuro.
+        canvas.before:
+            Color:
+                rgba: app.theme_cls.bg_normal
+            Rectangle:
+                pos: self.pos
+                size: self.size
 
         DashboardScreen:
             name: "dashboard"
