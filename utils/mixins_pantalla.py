@@ -86,4 +86,13 @@ class PaginacionMixin:
             return
         self._cargando_mas = True
         self._cargar_pagina(reset=False)
+        # Liberar el candado en el PROXIMO frame, no ahora mismo: on_scroll_y
+        # se dispara varias veces por gesto y _cargar_pagina es sincrono, asi
+        # que un solo flick hasta el final -- antes de que el layout recalcule
+        # la altura con las 40 filas nuevas y suba scroll_y por encima de
+        # 0.15 -- encadenaba 2-3 paginas de una. Con el reset diferido se
+        # carga como mucho una pagina por frame.
+        Clock.schedule_once(self._liberar_candado_paginacion, 0)
+
+    def _liberar_candado_paginacion(self, dt):
         self._cargando_mas = False

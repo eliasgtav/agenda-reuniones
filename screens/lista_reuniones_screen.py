@@ -94,6 +94,10 @@ class ListaReunionesScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         if self._load_event:
             self._load_event.cancel()
             self._load_event = None
+        # El rebote de busqueda (0.4s) puede seguir pendiente al salir: sin
+        # esto, _busqueda_cb disparaba cargar() -- clear_widgets + reconstruir
+        # la lista + 8 eventos de scroll -- sobre una pantalla que ya no se ve.
+        Clock.unschedule(self._busqueda_cb)
         self._cancelar_scroll_retries()
 
     def _construir_filtros(self):
