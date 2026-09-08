@@ -533,7 +533,7 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         guardar(config)
         App.get_running_app().actualizar_foto_dashboard()
 
-    def guardar_correo(self):
+    def _persistir_correo(self):
         config = cargar()
         config['correo_origen']   = self.ids.correo_origen_field.text.strip()
         config['correo_password'] = self.ids.correo_password_field.text.strip()
@@ -541,19 +541,35 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         config['smtp_server']     = self.ids.smtp_server_field.text.strip() or 'smtp.gmail.com'
         config['smtp_port']       = 587
         guardar(config)
+
+    def guardar_correo(self):
+        self._persistir_correo()
         self._mostrar('Correo guardado', 'Configuración guardada. Usa "PROBAR ENVÍO" para verificar.')
 
     def probar_correo(self):
         from utils.email_sender import probar_conexion
         from utils.config import cargar as cargar_config
         from kivy.clock import Clock
-        self.guardar_correo()
-        self._mostrar('Probando...', 'Enviando correo de prueba, espera unos segundos.')
+        # Antes esto llamaba a guardar_correo() (que abre su propio diálogo
+        # "Correo guardado") y luego abría "Probando..." encima, y este
+        # ultimo nunca se cerraba -- al llegar el resultado quedaban 3
+        # diálogos apilados. Ahora se persiste sin diálogo y el de progreso
+        # se descarta al llegar la respuesta.
+        self._persistir_correo()
+        self._dlg_probando = MDDialog(
+            title='Probando…',
+            text='Enviando correo de prueba, espera unos segundos.',
+            buttons=[],
+        )
+        self._dlg_probando.open()
 
         def _resultado(ok, msg):
-            Clock.schedule_once(lambda dt: self._mostrar(
-                '✓ Éxito' if ok else '⚠ Error', msg
-            ), 0)
+            def _final(dt):
+                if getattr(self, '_dlg_probando', None):
+                    self._dlg_probando.dismiss()
+                    self._dlg_probando = None
+                self._mostrar('✓ Éxito' if ok else '⚠ Error', msg)
+            Clock.schedule_once(_final, 0)
 
         probar_conexion(cargar_config(), callback=_resultado)
 
