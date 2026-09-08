@@ -550,14 +550,22 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             )
             if activa:
                 self.ids.lbl_estado.text = 'Estado: EN REUNIÓN — ¡Es hora!'
+            elif r['estado'] != 'pendiente':
+                # realizada / cancelada / no_asistida: no tiene sentido una
+                # cuenta regresiva a "EN REUNIÓN". Antes se calculaba igual y,
+                # para una reunion ya pasada, dt_reunion - ahora daba negativo
+                # -> "EN REUNIÓN se activa en -320 min" en pantalla.
+                self.ids.lbl_estado.text = f'Estado: {r["estado"].upper()}'
             else:
+                # pendiente y todavia no es la hora (ahora < dt_reunion aqui,
+                # asi que segs/mins siempre son positivos).
                 segs = (dt_reunion - ahora).total_seconds()
                 mins = int(segs / 60) + (1 if segs % 60 > 0 else 0)
                 if mins < 60:
-                    self.ids.lbl_estado.text = f'Estado: {r["estado"].upper()} — EN REUNIÓN se activa en {mins} min'
+                    self.ids.lbl_estado.text = f'Estado: PENDIENTE — EN REUNIÓN se activa en {mins} min'
                 else:
                     horas = mins // 60
-                    self.ids.lbl_estado.text = f'Estado: {r["estado"].upper()} — EN REUNIÓN en {horas}h {mins % 60}min'
+                    self.ids.lbl_estado.text = f'Estado: PENDIENTE — EN REUNIÓN en {horas}h {mins % 60}min'
         except Exception:
             pass
 
@@ -586,6 +594,24 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self.ids.btn_toggle_acuerdos.icon = 'chevron-up' if self._acuerdos_visibles else 'chevron-down'
         self._cargar_acuerdos_plazo()
 
+    def _pintar_encabezado(self):
+        """Refresca solo la tarjeta de encabezado (asunto, fecha/hora/lugar,
+        color y texto de estado) desde la BD. cargar() ademas reescribe los
+        3 campos grandes de texto (DESARROLLO / OBJETIVOS / ACUERDOS) con lo
+        que hay en disco -- llamarlo tras cambiar de estado o reprogramar
+        descartaba en silencio lo que el usuario hubiera escrito sin pulsar
+        'GUARDAR CAMBIOS'. Estas acciones solo tocan el encabezado."""
+        r = App.get_running_app().db.obtener_reunion(self._reunion_id)
+        if not r:
+            return
+        self.ids.header_card.md_bg_color = COLORES_ESTADO.get(
+            r['estado'], (0.95, 0.95, 0.95, 1)
+        )
+        self.ids.lbl_asunto.text = r['asunto']
+        self.ids.lbl_info.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
+        self.ids.lbl_estado.text = f"Estado: {r['estado'].upper()}"
+        self._verificar_hora_reunion()
+
     def _cargar_participantes(self, db):
         lista = self.ids.participantes_list
         lista.clear_widgets()
@@ -609,8 +635,11 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             lista.add_widget(fila)
 
     def _borrar_participante(self, pid):
-        App.get_running_app().db.eliminar_participante(pid)
-        self.cargar()
+        db = App.get_running_app().db
+        db.eliminar_participante(pid)
+        # Solo recargar la lista de participantes -- self.cargar() reescribiria
+        # tambien los campos de texto y perderia lo no guardado.
+        self._cargar_participantes(db)
 
     def agregar_participante(self):
         nombre = self.ids.nuevo_participante.text.strip()
@@ -801,8 +830,10 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
 
     def _borrar_archivo(self, aid):
         def _confirmar():
-            App.get_running_app().db.eliminar_archivo(aid)
-            self.cargar()
+            db = App.get_running_app().db
+            db.eliminar_archivo(aid)
+            # Solo la lista de archivos -- ver nota en _borrar_participante.
+            self._cargar_archivos(db)
 
         confirmar_eliminar(
             'Eliminar archivo',
@@ -851,7 +882,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     def cambiar_estado(self, nuevo_estado):
         db = App.get_running_app().db
         db.actualizar_reunion(self._reunion_id, estado=nuevo_estado)
-        self.cargar()
+        self._pintar_encabezado()
 
     def guardar_cambios(self):
         db = App.get_running_app().db
@@ -877,6 +908,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         config = cargar_config()
         tiene_correo = bool(config.get('correo_origen') and config.get('correo_password') and config.get('correo_destino'))
         msg_extra = '\nEnviando acta por correo...' if tiene_correo else ''
+        self._pintar_encabezado()
         self._mostrar_info('Reunión terminada', f'La reunión fue marcada como realizada.{msg_extra}')
         self._enviar_acta_correo(db)
 
@@ -1282,7 +1314,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self._nueva_hora = None
         self.ids.btn_nueva_fecha.text = 'Seleccionar fecha'
         self.ids.btn_nueva_hora.text = 'Seleccionar hora'
-        self.cargar()
+        self._pintar_encabezado()
 
     def _con_permiso_audio(self, on_granted):
         """RECORD_AUDIO en el manifest no basta: Android 6+ exige pedirlo en
