@@ -93,6 +93,7 @@ Builder.load_string('''
                     mode: "rectangle"
                     size_hint_x: 0.75
                     pos_hint: {"center_x": .5}
+                    on_text: root._actualizar_iniciales()
 
                 CampoMayusculas:
                     id: apellidos_field
@@ -100,6 +101,7 @@ Builder.load_string('''
                     mode: "rectangle"
                     size_hint_x: 0.75
                     pos_hint: {"center_x": .5}
+                    on_text: root._actualizar_iniciales()
 
                 BotonPlano:
                     text: "CAMBIAR FOTO"
