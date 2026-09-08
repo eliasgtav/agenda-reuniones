@@ -69,18 +69,39 @@ class SeguimientoScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         self.ids.lista_acuerdos.add_widget(self._crear_card(ac))
 
     def _crear_card(self, ac):
-        return crear_tarjeta_acuerdo(
+        # holder se llena justo despues de construir la tarjeta (antes de que
+        # el usuario pueda tocar el checkbox), asi _toggle_estado puede
+        # reemplazar solo esta tarjeta sin reconstruir la lista entera.
+        holder = {}
+
+        def _toggle(acuerdo_id, estaba_completado):
+            self._toggle_estado(acuerdo_id, estaba_completado, holder.get('card'), ac)
+
+        card = crear_tarjeta_acuerdo(
             ac,
-            on_toggle_estado=self._toggle_estado,
+            on_toggle_estado=_toggle,
             on_ver_reunion=self._ver_reunion,
             mostrar_reunion=True,
         )
+        holder['card'] = card
+        return card
 
-    def _toggle_estado(self, acuerdo_id, estaba_completado):
-        app = App.get_running_app()
+    def _toggle_estado(self, acuerdo_id, estaba_completado, card, ac):
         nuevo_estado = 'pendiente' if estaba_completado else 'completado'
-        app.db.marcar_estado_acuerdo(acuerdo_id, nuevo_estado)
-        self.cargar()
+        App.get_running_app().db.marcar_estado_acuerdo(acuerdo_id, nuevo_estado)
+        # Reemplazar SOLO esta tarjeta. self.cargar() reconstruia la lista
+        # completa y volvia a la primera pagina + scroll arriba -- en la
+        # pantalla cuya accion central es justamente marcar acuerdos, cada
+        # tic tiraba al usuario al principio y colapsaba lo ya paginado.
+        lista = self.ids.lista_acuerdos
+        if card is None or card not in lista.children:
+            self.cargar()
+            return
+        idx = lista.children.index(card)
+        ac_actualizado = dict(ac)
+        ac_actualizado['estado'] = nuevo_estado
+        lista.remove_widget(card)
+        lista.add_widget(self._crear_card(ac_actualizado), index=idx)
 
     def _ver_reunion(self, reunion_id):
         app = App.get_running_app()
