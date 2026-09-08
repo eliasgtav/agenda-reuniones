@@ -289,37 +289,57 @@ class EnReunionScreen(MDScreen):
             return
         n = self._guardar_acuerdos_en_bd()
         self._refrescar_lista()
-        self._mostrar('Guardado', f'{n} acuerdo(s) guardados en las notas de la reunión.')
+        if n:
+            self._mostrar('Guardado', f'{n} acuerdo(s) guardados en las notas de la reunión.')
+        else:
+            self._mostrar('Guardado', 'Los acuerdos ya estaban guardados en las notas de la reunión.')
 
     def _guardar_acuerdos_en_bd(self):
-        """Vuelca self._acuerdos a la BD (notas + tabla acuerdos con plazo)
-        y limpia la lista en memoria. Separado de guardar_en_notas() para
-        poder llamarlo en silencio desde on_leave() -- antes los acuerdos
-        capturados en vivo solo vivian en memoria hasta tocar "GUARDAR EN
-        NOTAS" a mano, sin autoguardado ni aviso: una llamada entrante, el
-        telefono trabandose, o tocar VOLVER/atras por error a media reunion
-        perdia todo lo capturado sin ninguna advertencia."""
+        """Vuelca self._acuerdos a la BD (notas + tabla acuerdos con plazo).
+        Separado de guardar_en_notas() para poder llamarlo en silencio desde
+        on_leave() -- antes los acuerdos capturados en vivo solo vivian en
+        memoria hasta tocar "GUARDAR EN NOTAS" a mano, sin autoguardado ni
+        aviso: una llamada entrante, el telefono trabandose, o tocar
+        VOLVER/atras por error a media reunion perdia todo lo capturado sin
+        ninguna advertencia.
+
+        Devuelve cuantos acuerdos NUEVOS se anadieron al bloque de notas.
+
+        El bloque de notas se reconstruye a partir de los bullets que YA
+        estan en las notas mas los que falten de self._acuerdos -- no solo
+        con self._acuerdos. Sin esto, como guardar vacia self._acuerdos,
+        pulsar "GUARDAR EN NOTAS", agregar mas acuerdos y luego salir (o que
+        entre una llamada -> on_leave) reescribia el bloque solo con los
+        ultimos y borraba en silencio los guardados antes."""
         if not self._acuerdos or not self._reunion_id:
             return 0
         app = App.get_running_app()
         r = app.db.obtener_reunion(self._reunion_id)
         if not r:
             return 0
-        notas_prev, _ = separar_notas_acuerdos(r.get('notas', ''))
-        textos = []
+        notas_prev, bloque_prev = separar_notas_acuerdos(r.get('notas', ''))
+        textos = [
+            linea[1:].strip()
+            for linea in bloque_prev.split('\n')
+            if linea.strip().startswith('•')
+        ]
+        nuevos = 0
         for a in self._acuerdos:
-            if isinstance(a, dict):
-                textos.append(a['texto'])
-                if a.get('plazo'):
-                    app.db.guardar_acuerdo(self._reunion_id, a['texto'], a['plazo'], a.get('responsable', ''))
-            else:
-                textos.append(a)
+            texto = a['texto'] if isinstance(a, dict) else a
+            if texto in textos:
+                continue
+            textos.append(texto)
+            nuevos += 1
+            if isinstance(a, dict) and a.get('plazo'):
+                app.db.guardar_acuerdo(self._reunion_id, a['texto'], a['plazo'], a.get('responsable', ''))
         bloque = f'\n\n{MARCADOR_ACUERDOS}\n' + '\n'.join(f'• {t}' for t in textos)
         nuevas_notas = (notas_prev + bloque).strip()
         app.db.actualizar_reunion(self._reunion_id, notas=nuevas_notas)
-        n = len(self._acuerdos)
-        self._acuerdos = []
-        return n
+        # Repoblar desde el bloque ya escrito: la lista sigue mostrando todo
+        # lo capturado (antes se vaciaba tras guardar) y un guardado
+        # posterior no vuelve a insertar en la tabla `acuerdos` (plazo='').
+        self._acuerdos = [{'texto': t, 'plazo': ''} for t in textos]
+        return nuevos
 
     def on_leave(self):
         self._guardar_acuerdos_en_bd()
