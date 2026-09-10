@@ -174,7 +174,7 @@ def _obtener_barra():
 # código de logging en el archivo (por si hace falta reabrir el diagnóstico
 # de algo relacionado) pero apagado -- no debe loguear cada tecla en
 # producción.
-_DEBUG_TECLADO = False
+_DEBUG_TECLADO = True   # DIAGNOSTICO borrado acelerado -- volver a False despues
 
 
 def _log_teclado(mensaje_fn):
@@ -242,26 +242,36 @@ def _programar_restart_input():
 #           a borrar una palabra (o un salto de línea) por tick para limpiar
 #           el texto rápido.
 _BKSP_KEYCODE = 8               # 'backspace' en los keycodes de Kivy
-_BKSP_RETARDO_INICIAL = 0.30    # pausa antes de arrancar la repetición
-_BKSP_INTERVALO_CHAR = 0.05     # fase 1: ritmo fijo, un carácter por tick
-_BKSP_UMBRAL_PALABRA = 1.5      # sostenido >= esto -> fase 2 (palabra)
-_BKSP_INTERVALO_PALABRA = 0.09  # fase 2: una palabra/salto por tick
-_BKSP_MAX_SOSTENIDO = 20        # red de seguridad si no llega el key-up
+_BKSP_INTERVALO_CHAR = 0.055    # fase 1: ritmo fijo, un carácter por tick
+_BKSP_UMBRAL_PALABRA = 1.4      # sostenido >= esto -> fase 2 (palabra)
+_BKSP_INTERVALO_PALABRA = 0.10  # fase 2: una palabra/salto por tick
+_BKSP_LIBERAR = 0.55           # sin key_down por este tiempo => tecla soltada
+_BKSP_MAX_SOSTENIDO = 20        # red de seguridad dura
 
 
 class BorradoAcelerado:
     """Mixin para (MD)TextInput: mantener pulsado Backspace borra en dos
     fases (carácter -> palabra/bloque). Ver el bloque de constantes arriba.
 
-    Se apoya en keyboard_on_key_up para parar al soltar, con dos redes de
-    seguridad por si ese evento no llega (pasa en algunos teclados/ROMs de
-    Android): se detiene al perder el foco y tras _BKSP_MAX_SOSTENIDO s."""
+    El ritmo lo marca SOLO el Clock de aquí, no el teclado: en Android
+    (bootstrap SDL2) mantener pulsado el retroceso genera una ráfaga de
+    eventos key_down/key_up sintéticos al ritmo (ya acelerado) de Gboard
+    -- si dejáramos que cada uno borrara, o que cada key_up parara el
+    temporizador, el borrado saldría "de golpe". Aquí los key_down solo
+    cuentan como "sigo pulsando" (refrescan _bksp_last_down); el key_up se
+    ignora. Se para cuando no llega un key_down en _BKSP_LIBERAR s, al
+    perder el foco, al vaciarse el campo, o tras _BKSP_MAX_SOSTENIDO s."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._bksp_evento = None
         self._bksp_t0 = 0.0
+        self._bksp_last_down = 0.0
         self.bind(focus=self._bksp_on_focus)
+
+    def _id_log(self):
+        # CampoOrtografico lo sobrescribe; esto cubre a CampoSimple.
+        return getattr(self, 'hint_text', '') or f'campo{id(self) % 10000}'
 
     def _bksp_on_focus(self, _inst, tiene_foco):
         if not tiene_foco:
@@ -275,30 +285,47 @@ class BorradoAcelerado:
             and not self.readonly
             and not self.disabled
         ):
+            ahora = time()
+            self._bksp_last_down = ahora
             if self._bksp_evento is None:
-                self._bksp_t0 = time()
-                if self._bksp_borrar(palabra=False):
-                    self._bksp_evento = Clock.schedule_once(
-                        self._bksp_tick, _BKSP_RETARDO_INICIAL
-                    )
-            # Consumir el evento: el auto-repeat lo lleva el Clock de aquí,
-            # no el do_backspace de Kivy ni el key-repeat de SDL/Android
-            # (si además llegara, duplicaría el borrado).
+                self._bksp_t0 = ahora
+                self._bksp_borrar(palabra=False)
+                self._bksp_evento = Clock.schedule_once(
+                    self._bksp_tick, _BKSP_INTERVALO_CHAR
+                )
+            _log_teclado(lambda:
+                f'{self._id_log()} BKSP key_down ahora={ahora:.3f} '
+                f'evento={"si" if self._bksp_evento else "no"} texto={self.text!r}'
+            )
+            # Consumir: el auto-repeat lo lleva el Clock, no do_backspace de
+            # Kivy ni el key-repeat de SDL/Android.
             return True
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
     def keyboard_on_key_up(self, window, keycode):
         if keycode[0] == _BKSP_KEYCODE:
-            self._bksp_detener()
+            _log_teclado(lambda:
+                f'{self._id_log()} BKSP key_up t={time():.3f} '
+                f'(ignorado; para por ausencia de key_down)'
+            )
         return super().keyboard_on_key_up(window, keycode)
 
     def _bksp_tick(self, _dt):
-        if not self.focus:
+        ahora = time()
+        sostenido = ahora - self._bksp_t0
+        if (
+            not self.focus
+            or ahora - self._bksp_last_down > _BKSP_LIBERAR
+            or sostenido > _BKSP_MAX_SOSTENIDO
+        ):
+            _log_teclado(lambda:
+                f'{self._id_log()} BKSP stop foco={self.focus} '
+                f'gap={ahora - self._bksp_last_down:.3f} sostenido={sostenido:.2f}'
+            )
             self._bksp_detener()
             return
-        sostenido = time() - self._bksp_t0
         fase_palabra = sostenido >= _BKSP_UMBRAL_PALABRA
-        if not self._bksp_borrar(palabra=fase_palabra) or sostenido >= _BKSP_MAX_SOSTENIDO:
+        if not self._bksp_borrar(palabra=fase_palabra):
             self._bksp_detener()
             return
         proximo = _BKSP_INTERVALO_PALABRA if fase_palabra else _BKSP_INTERVALO_CHAR
