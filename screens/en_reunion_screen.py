@@ -10,7 +10,7 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.card import MDCard
-from utils.widgets import CampoOrtografico
+from utils.widgets import CampoOrtografico, CampoSimple
 from utils.fechas import fecha_larga
 from utils.voz import DictadoVoz
 from utils.notas_acuerdos import separar as separar_notas_acuerdos, MARCADOR as MARCADOR_ACUERDOS
@@ -103,11 +103,11 @@ Builder.load_string('''
             multiline: True
             size_hint_y: None
             height: '160dp'
-            font_size: '15sp'
+            font_size: '16sp'
             padding: ['8dp', '8dp']
 
         # Responsable (opcional)
-        MDTextField:
+        CampoSimple:
             id: responsable_field
             hint_text: "Responsable (opcional)"
             mode: "rectangle"

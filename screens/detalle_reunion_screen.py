@@ -229,7 +229,7 @@ Builder.load_string('''
                     multiline: True
                     size_hint_y: None
                     height: '280dp'
-                    font_size: '15sp'
+                    font_size: '16sp'
 
                 MDLabel:
                     id: lbl_voz_estado
@@ -278,7 +278,7 @@ Builder.load_string('''
                 multiline: True
                 size_hint_y: None
                 height: '220dp'
-                font_size: '15sp'
+                font_size: '16sp'
 
             MDLabel:
                 id: lbl_voz_notas
@@ -326,7 +326,7 @@ Builder.load_string('''
                 multiline: True
                 size_hint_y: None
                 height: '220dp'
-                font_size: '15sp'
+                font_size: '16sp'
 
             MDLabel:
                 id: lbl_voz_conclusion
@@ -1064,6 +1064,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         kwargs = dict(hint_text=hint_text, mode='rectangle')
         if multiline:
             kwargs['multiline'] = True
+            kwargs['font_size'] = '16sp'
         if height is not None:
             kwargs['size_hint_y'] = None
             kwargs['height'] = height

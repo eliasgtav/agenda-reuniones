@@ -17,7 +17,7 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from utils.config import cargar, guardar
-from utils.widgets import CampoMayusculas, CampoOraciones, BotonPlano
+from utils.widgets import CampoMayusculas, CampoOraciones, CampoSimple, BotonPlano
 from utils.mixins_pantalla import ScrollArribaMixin
 from utils.perfil import iniciales_de
 
@@ -133,26 +133,26 @@ Builder.load_string('''
                 adaptive_height: True
                 theme_text_color: "Secondary"
 
-            MDTextField:
+            CampoSimple:
                 id: correo_origen_field
                 hint_text: "Tu correo (remitente)"
                 mode: "rectangle"
                 icon_right: "email"
 
-            MDTextField:
+            CampoSimple:
                 id: correo_password_field
                 hint_text: "Contraseña de aplicación"
                 mode: "rectangle"
                 password: True
                 icon_right: "lock"
 
-            MDTextField:
+            CampoSimple:
                 id: correo_destino_field
                 hint_text: "Correo destinatario del acta"
                 mode: "rectangle"
                 icon_right: "email-send"
 
-            MDTextField:
+            CampoSimple:
                 id: smtp_server_field
                 hint_text: "Servidor SMTP (ej: smtp.gmail.com)"
                 mode: "rectangle"

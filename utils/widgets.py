@@ -230,7 +230,117 @@ def _programar_restart_input():
     Clock.schedule_once(_restart_input_android, 0.05)
 
 
-class CampoOrtografico(MDTextField):
+# ── Borrado acelerado al mantener pulsado Backspace ───────────────────────
+# En Android con el bootstrap SDL2 el teclado corre en modo "generar eventos
+# de tecla" (input_type='null', ver docstring de CampoOrtografico) y el
+# hold-to-delete acelerado propio de Gboard/teclado de iOS no siempre llega
+# a la app -- mantener pulsado el retroceso borraba a un ritmo lento y sin
+# pasar nunca a borrar por palabra. Este mixin lo implementa del lado de la
+# app, en dos fases como el del sistema:
+#   Fase 1: carácter a carácter a un ritmo fijo.
+#   Fase 2: tras mantener pulsado más de _BKSP_UMBRAL_PALABRA segundos, pasa
+#           a borrar una palabra (o un salto de línea) por tick para limpiar
+#           el texto rápido.
+_BKSP_KEYCODE = 8               # 'backspace' en los keycodes de Kivy
+_BKSP_RETARDO_INICIAL = 0.30    # pausa antes de arrancar la repetición
+_BKSP_INTERVALO_CHAR = 0.05     # fase 1: ritmo fijo, un carácter por tick
+_BKSP_UMBRAL_PALABRA = 1.5      # sostenido >= esto -> fase 2 (palabra)
+_BKSP_INTERVALO_PALABRA = 0.09  # fase 2: una palabra/salto por tick
+_BKSP_MAX_SOSTENIDO = 20        # red de seguridad si no llega el key-up
+
+
+class BorradoAcelerado:
+    """Mixin para (MD)TextInput: mantener pulsado Backspace borra en dos
+    fases (carácter -> palabra/bloque). Ver el bloque de constantes arriba.
+
+    Se apoya en keyboard_on_key_up para parar al soltar, con dos redes de
+    seguridad por si ese evento no llega (pasa en algunos teclados/ROMs de
+    Android): se detiene al perder el foco y tras _BKSP_MAX_SOSTENIDO s."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._bksp_evento = None
+        self._bksp_t0 = 0.0
+        self.bind(focus=self._bksp_on_focus)
+
+    def _bksp_on_focus(self, _inst, tiene_foco):
+        if not tiene_foco:
+            self._bksp_detener()
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        mods = set(modifiers) - {'capslock', 'numlock', 'shift'}
+        if (
+            keycode[0] == _BKSP_KEYCODE
+            and not mods
+            and not self.readonly
+            and not self.disabled
+        ):
+            if self._bksp_evento is None:
+                self._bksp_t0 = time()
+                if self._bksp_borrar(palabra=False):
+                    self._bksp_evento = Clock.schedule_once(
+                        self._bksp_tick, _BKSP_RETARDO_INICIAL
+                    )
+            # Consumir el evento: el auto-repeat lo lleva el Clock de aquí,
+            # no el do_backspace de Kivy ni el key-repeat de SDL/Android
+            # (si además llegara, duplicaría el borrado).
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+    def keyboard_on_key_up(self, window, keycode):
+        if keycode[0] == _BKSP_KEYCODE:
+            self._bksp_detener()
+        return super().keyboard_on_key_up(window, keycode)
+
+    def _bksp_tick(self, _dt):
+        if not self.focus:
+            self._bksp_detener()
+            return
+        sostenido = time() - self._bksp_t0
+        fase_palabra = sostenido >= _BKSP_UMBRAL_PALABRA
+        if not self._bksp_borrar(palabra=fase_palabra) or sostenido >= _BKSP_MAX_SOSTENIDO:
+            self._bksp_detener()
+            return
+        proximo = _BKSP_INTERVALO_PALABRA if fase_palabra else _BKSP_INTERVALO_CHAR
+        self._bksp_evento = Clock.schedule_once(self._bksp_tick, proximo)
+
+    def _bksp_detener(self):
+        if self._bksp_evento is not None:
+            self._bksp_evento.cancel()
+            self._bksp_evento = None
+
+    def _bksp_borrar(self, palabra):
+        """Borra una unidad hacia atrás. Devuelve True si algo cambió."""
+        antes = self.text
+        if self.selection_text:
+            self.delete_selection()
+            return self.text != antes
+        fin = self.cursor_index()
+        if fin <= 0:
+            return False
+        if palabra:
+            t = self.text
+            i = fin
+            # comer espacios/tabs pegados al cursor
+            while i > 0 and t[i - 1] in ' \t':
+                i -= 1
+            # un solo salto de línea por tick; si no, comer el bloque de
+            # no-espacios (la palabra) que quede detrás
+            if i > 0 and t[i - 1] == '\n':
+                i -= 1
+            else:
+                while i > 0 and not t[i - 1].isspace():
+                    i -= 1
+            if i >= fin:
+                return False
+            self.select_text(i, fin)
+            self.delete_selection()
+            return self.text != antes
+        self.do_backspace()
+        return self.text != antes
+
+
+class CampoOrtografico(BorradoAcelerado, MDTextField):
     """MDTextField con corrección ortográfica en español vía barra propia
     (ver _BarraSugerencias arriba y utils/ortografia.py para el corrector
     compartido). No fija input_type='text' a propósito -- eso activaría
@@ -638,6 +748,13 @@ class CampoAcuerdosNumerados(CampoOraciones):
             if m:
                 numeros.append(int(m.group(1)))
         return (max(numeros) + 1) if numeros else 1
+
+
+class CampoSimple(BorradoAcelerado, MDTextField):
+    """MDTextField con borrado acelerado al mantener pulsado el retroceso
+    (ver BorradoAcelerado) pero SIN corrección ortográfica -- para campos
+    de valor corto donde el corrector estorba (correo, contraseña, servidor
+    SMTP, responsable)."""
 
 
 class BotonPlano(MDRaisedButton):
