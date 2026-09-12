@@ -42,7 +42,9 @@ contra el codigo actual del recipe python3):
    confirmada: el propio recipe de freetype en p4a ya menciona SourceForge
    en su docstring ("seealso"), y la release 2.14.1 esta ahi
    (sourceforge.net/projects/freetype/files/freetype2/2.14.1/), mismo
-   archivo.
+   archivo. Ver el comentario junto al patch para el detalle de por que
+   la URL exacta importa (basename de shell, no solo que el archivo este
+   disponible).
 4. AndroidManifest.tmpl.xml (bootstrap _sdl_common, usado por sdl2):
    inserta el <provider> de FileProvider (para "abrir adjunto", ver
    utils/abrir_archivo.py) directo en el template. Es necesario parchear
@@ -200,16 +202,28 @@ else:
     print('WARN: start.c no encontrado (se parcheara al buildear cuando este disponible)')
 
 # --- 3. recipes/freetype: usar mirror de SourceForge en vez de Savannah ---
+# OJO con la URL exacta: Recipe.download() (pythonforandroid/recipe.py) saca
+# el nombre de archivo local con el binario `basename` de shell aplicado a
+# la URL CONFIGURADA (no a donde termine redirigiendo) -- si se usa el link
+# "de boton" de SourceForge (.../freetype-2.14.1.tar.gz/download), basename
+# devuelve literalmente "download" y unpack() despues falla con "Could not
+# extract ... download, it must be .zip, .tar.gz..." (visto en build real,
+# 2026-09-11: el archivo SI se bajaba bien, pero con nombre local
+# incorrecto). "downloads.sourceforge.net/project/<...>/freetype-{version}.
+# tar.gz" (sin "/download" al final) evita el problema: la URL configurada
+# ya termina en el nombre de archivo real, y igual redirige (302) al
+# mirror real (confirmado con curl -I: sirve application/x-gzip, mismo
+# tamano que el archivo listado en SourceForge).
 freetype_recipe_path = f'{base}/freetype/__init__.py'
 if os.path.exists(freetype_recipe_path):
     c = open(freetype_recipe_path).read()
     pat = "url = 'https://download.savannah.gnu.org/releases/freetype/freetype-{version}.tar.gz'"
-    mirror = "url = 'https://sourceforge.net/projects/freetype/files/freetype2/{version}/freetype-{version}.tar.gz/download'"
+    mirror = "url = 'https://downloads.sourceforge.net/project/freetype/freetype2/{version}/freetype-{version}.tar.gz'"
     if pat in c:
         c = c.replace(pat, mirror)
         open(freetype_recipe_path, 'w').write(c)
         print('recipes/freetype/__init__.py parcheado: URL de descarga a mirror de SourceForge')
-    elif 'sourceforge.net' in c:
+    elif 'downloads.sourceforge.net' in c:
         print('recipes/freetype/__init__.py: ya usa el mirror de SourceForge')
     else:
         print('WARN: patron de URL de freetype no encontrado en recipes/freetype/__init__.py '
