@@ -30,7 +30,18 @@ def _cargar():
     global _spell, _cargando
     try:
         from spellchecker import SpellChecker
-        corrector = SpellChecker(language='es')
+        # distance=1 (por defecto pyspellchecker usa 2): generar candidatas
+        # aplica el conjunto de "ediciones de una letra" sobre la palabra, y
+        # con distance=2 lo vuelve a aplicar SOBRE CADA UNA de esas
+        # candidatas -- para una palabra/texto largo mal escrito (o basura
+        # pegada/tecleada, ej. una racha de teclas al azar) el conjunto
+        # crece combinatoriamente y bloquea el hilo principal varios
+        # segundos (bug real: probando el borrado acelerado con un texto de
+        # prueba de ~27 caracteres sin sentido, el cursor y toda la app
+        # quedaban congelados esperando candidates()). distance=1 sigue
+        # cubriendo la gran mayoría de errores de tipeo reales (una letra
+        # de más/menos/cambiada, transposición) sin ese costo.
+        corrector = SpellChecker(language='es', distance=1)
     except Exception:
         corrector = None
     with _lock:

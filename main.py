@@ -98,6 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
+    from kivy.utils import platform
     from kivy.uix.screenmanager import ScreenManager, NoTransition, FadeTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
@@ -294,7 +295,20 @@ MDBoxLayout:
         def _ir_a(self, screen_name):
             sm = self.root.ids.sm
             primera_vez = screen_name not in self._pantallas_visitadas
-            if primera_vez:
+            if primera_vez or platform != 'android':
+                # FadeTransition (ShaderTransition) toma una foto FBO de
+                # cada pantalla para el crossfade -- en escritorio, sobre
+                # todo con GPUs integradas viejas (Intel HD 3000 vía ANGLE
+                # software), esa captura+mezcla puede tardar lo bastante
+                # como para sentirse como una traba momentánea, y como
+                # MDScreen no pinta fondo propio, cualquier hueco de esa
+                # foto durante la animación deja ver lo que hubiera debajo
+                # en la ventana (reportado por el usuario como "fantasma"
+                # de la pantalla anterior al navegar en escritorio,
+                # 2026-09-10). En Android el fundido ya está confirmado
+                # limpio en dispositivo real, así que se deja intacto ahí;
+                # en escritorio se usa NoTransition siempre (corte directo,
+                # sin foto ni mezcla).
                 sm.transition = NoTransition()
             else:
                 # ShaderTransition.clearcolor (clase base de FadeTransition)

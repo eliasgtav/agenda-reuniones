@@ -11,7 +11,7 @@ sugerencia nativa a veces no hacía nada y a veces pegaba el texto nuevo
 mal calculado sobre el viejo. Con una barra propia el reemplazo lo hace
 la app en Python, sin depender de esa conexión rota."""
 import re
-from time import time
+from time import monotonic as time
 
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -126,9 +126,27 @@ class _BarraSugerencias(MDCard):
             self.width = Window.width
             self.pos = (0, alto_teclado)
         else:
+            # En escritorio no hay teclado que tape nada, pero en campos
+            # multilínea que crecen hacia abajo (Desarrollo/Objetivos/
+            # Acuerdos, área de captura de En Reunión) el cursor -- y la
+            # palabra que se está escribiendo -- casi siempre queda pegado
+            # al BORDE INFERIOR del campo, justo donde antes se ponía la
+            # barra ("y - self.height - dp(4)", debajo del campo pero
+            # encima de lo que sea que venga después en el layout): en la
+            # práctica tapaba la palabra recién escrita. Ahora se ancla
+            # ARRIBA del campo en vez de abajo -- nunca se solapa con el
+            # texto que vive DENTRO del campo, sin importar en qué línea
+            # esté el cursor.
             self.adaptive_width = True
-            x, y = campo.to_window(campo.x, campo.y)
-            self.pos = (x, y - self.height - dp(4))
+            x, top = campo.to_window(campo.x, campo.top)
+            arriba = top + dp(4)
+            if arriba + self.height > Window.height:
+                # No cabe arriba (campo pegado al borde superior de la
+                # ventana) -> mejor debajo del campo que cortado por fuera.
+                _, base = campo.to_window(campo.x, campo.y)
+                arriba = base - self.height - dp(4)
+            x = max(0, min(x, Window.width - self.width))
+            self.pos = (x, arriba)
 
     def ocultar(self, campo=None):
         if campo is not None and self.campo is not campo:
@@ -174,7 +192,15 @@ def _obtener_barra():
 # código de logging en el archivo (por si hace falta reabrir el diagnóstico
 # de algo relacionado) pero apagado -- no debe loguear cada tecla en
 # producción.
-_DEBUG_TECLADO = True   # DIAGNOSTICO borrado acelerado -- volver a False despues
+_DEBUG_TECLADO = False  # DIAGNOSTICO -- NUNCA dejar en True fuera de una sesión
+                        # de diagnóstico puntual: cada tecla en CUALQUIER
+                        # campo de texto de la app dispara varias escrituras a
+                        # disco (key_down/up, do_backspace, insert_text,
+                        # tick...) -- con esto en True se vio la app ponerse
+                        # lenta y llegar a congelarse varios segundos al
+                        # mantener presionado Backspace (escritorio,
+                        # 2026-09-10, probablemente antivirus interceptando
+                        # cada escritura rápida al archivo de log).
 
 
 def _log_teclado(mensaje_fn):
@@ -188,9 +214,13 @@ def _log_teclado(mensaje_fn):
         return
     try:
         from datetime import datetime
-        from android.storage import app_storage_path
         import os
-        ruta = os.path.join(app_storage_path(), 'teclado_debug.log')
+        try:
+            from android.storage import app_storage_path
+            base = app_storage_path()
+        except Exception:
+            base = os.path.expanduser('~')
+        ruta = os.path.join(base, 'teclado_debug.log')
         with open(ruta, 'a', encoding='utf-8') as f:
             f.write(f'[{datetime.now().isoformat()}] {mensaje_fn()}\n')
     except Exception:
@@ -208,6 +238,8 @@ def _restart_input_android(_dt=None):
     'Gaytán' que ya no estaba, pegado con 'eli' recién tecleado). Forzar
     InputMethodManager.restartInput() tira el estado interno viejo de
     Gboard para que la próxima palabra se calcule contra el texto real."""
+    if platform != 'android':
+        return
     try:
         from jnius import autoclass
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -225,7 +257,11 @@ def _programar_restart_input():
     # Debounced: una ráfaga de varios retrocesos seguidos (mantener
     # presionado) solo debe disparar UN restart, justo después del último,
     # no uno por cada tecla -- restartInput() es una operación pesada del
-    # lado de Android.
+    # lado de Android. No aplica fuera de Android -- evita programar un
+    # Clock event (y la excepción de jnius que _restart_input_android
+    # atrapa) en cada borrado en escritorio.
+    if platform != 'android':
+        return
     Clock.unschedule(_restart_input_android)
     Clock.schedule_once(_restart_input_android, 0.05)
 
@@ -234,33 +270,48 @@ def _programar_restart_input():
 # En Android con el bootstrap SDL2 el teclado corre en modo "generar eventos
 # de tecla" (input_type='null', ver docstring de CampoOrtografico) y el
 # hold-to-delete acelerado propio de Gboard/teclado de iOS no siempre llega
-# a la app -- mantener pulsado el retroceso borraba a un ritmo lento y sin
-# pasar nunca a borrar por palabra. Este mixin lo implementa del lado de la
-# app, en dos fases como el del sistema:
-#   Fase 1: carácter a carácter a un ritmo fijo.
-#   Fase 2: tras mantener pulsado más de _BKSP_UMBRAL_PALABRA segundos, pasa
-#           a borrar una palabra (o un salto de línea) por tick para limpiar
-#           el texto rápido.
-_BKSP_KEYCODE = 8               # 'backspace' en los keycodes de Kivy
-_BKSP_INTERVALO_CHAR = 0.055    # fase 1: ritmo fijo, un carácter por tick
-_BKSP_UMBRAL_PALABRA = 1.4      # sostenido >= esto -> fase 2 (palabra)
-_BKSP_INTERVALO_PALABRA = 0.10  # fase 2: una palabra/salto por tick
-_BKSP_LIBERAR = 0.55           # sin key_down por este tiempo => tecla soltada
+# a la app -- mantener pulsado el retroceso borraba a un ritmo lento y
+# constante. Este mixin lo implementa del lado de la app, como el
+# hold-to-delete nativo de WhatsApp/EditText: siempre carácter por carácter
+# (nunca salta a borrar palabras completas), empezando lento y acelerando
+# gradualmente mientras se mantiene presionado.
+_BKSP_KEYCODE = 8                  # 'backspace' en los keycodes de Kivy
+_BKSP_INTERVALO_INICIAL = 0.35     # ritmo al empezar a mantener pulsado
+_BKSP_INTERVALO_MIN = 0.08         # ritmo tope tras acelerar
+_BKSP_ACELERACION_DURACION = 3.0   # segundos para llegar del ritmo inicial al tope
+_BKSP_VERIFICAR_LIBERACION = 0.12  # tras un key_up, cuanto esperar antes de
+                                    # confirmar que fue un toque suelto (ver
+                                    # docstring de la clase)
+_BKSP_LIBERAR = 0.55           # red de respaldo: sin key_down por este
+                                # tiempo => tecla soltada (por si nunca
+                                # llega key_up, p.ej. se pierde el foco)
 _BKSP_MAX_SOSTENIDO = 20        # red de seguridad dura
 
 
 class BorradoAcelerado:
-    """Mixin para (MD)TextInput: mantener pulsado Backspace borra en dos
-    fases (carácter -> palabra/bloque). Ver el bloque de constantes arriba.
+    """Mixin para (MD)TextInput: mantener pulsado Backspace acelera el
+    borrado. SOLO actúa en Android -- ahí el teclado corre en modo
+    "generar eventos de tecla" (ver docstring de CampoOrtografico) y el
+    hold-to-delete acelerado propio de Gboard no siempre llega a la app,
+    así que hace falta reimplementarlo del lado de Python con un Clock
+    propio. Mantener pulsado el retroceso genera una ráfaga de eventos
+    key_down/key_up sintéticos al ritmo (ya acelerado) de Gboard -- si
+    dejáramos que cada uno borrara, el borrado saldría "de golpe". Los
+    key_down solo cuentan como "sigo pulsando" (refrescan
+    _bksp_last_down); un key_up programa una verificación corta
+    (_BKSP_VERIFICAR_LIBERACION): si no llega un key_down nuevo en ese
+    lapso, se confirma que la tecla ya se soltó y se para ahí (evita que un
+    toque suelto borre de más). Si sí llega un key_down nuevo (el patrón de
+    ráfaga real de Gboard), la verificación no hace nada y el borrado sigue
+    al ritmo del Clock. _BKSP_LIBERAR queda como red de respaldo por si un
+    key_up se pierde del todo (p.ej. al perder el foco a media pulsación).
 
-    El ritmo lo marca SOLO el Clock de aquí, no el teclado: en Android
-    (bootstrap SDL2) mantener pulsado el retroceso genera una ráfaga de
-    eventos key_down/key_up sintéticos al ritmo (ya acelerado) de Gboard
-    -- si dejáramos que cada uno borrara, o que cada key_up parara el
-    temporizador, el borrado saldría "de golpe". Aquí los key_down solo
-    cuentan como "sigo pulsando" (refrescan _bksp_last_down); el key_up se
-    ignora. Se para cuando no llega un key_down en _BKSP_LIBERAR s, al
-    perder el foco, al vaciarse el campo, o tras _BKSP_MAX_SOSTENIDO s."""
+    ESCRITORIO: no se toca nada, letra por letra, al ritmo nativo de
+    key-repeat de Windows -- a pedido explícito del usuario tras probar
+    variantes con aceleración propia (por Clock y por evento) que en este
+    entorno se sintieron "de golpe" o inconsistentes (ver historial de
+    commits de esta función). No asumir que hace falta "arreglar" esto: es
+    el comportamiento pedido, no un placeholder."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -279,19 +330,20 @@ class BorradoAcelerado:
 
     def keyboard_on_key_down(self, window, keycode, text, modifiers):
         mods = set(modifiers) - {'capslock', 'numlock', 'shift'}
-        if (
+        es_backspace = (
             keycode[0] == _BKSP_KEYCODE
             and not mods
             and not self.readonly
             and not self.disabled
-        ):
+        )
+        if es_backspace and platform == 'android':
             ahora = time()
             self._bksp_last_down = ahora
             if self._bksp_evento is None:
                 self._bksp_t0 = ahora
-                self._bksp_borrar(palabra=False)
+                self._bksp_borrar()
                 self._bksp_evento = Clock.schedule_once(
-                    self._bksp_tick, _BKSP_INTERVALO_CHAR
+                    self._bksp_tick, _BKSP_INTERVALO_INICIAL
                 )
             _log_teclado(lambda:
                 f'{self._id_log()} BKSP key_down ahora={ahora:.3f} '
@@ -300,15 +352,48 @@ class BorradoAcelerado:
             # Consumir: el auto-repeat lo lleva el Clock, no do_backspace de
             # Kivy ni el key-repeat de SDL/Android.
             return True
+        # Escritorio: sin interceptar nada -- cada key_down real de
+        # Windows (a su propio ritmo de key-repeat nativo) borra
+        # exactamente un carácter vía el do_backspace() por defecto de
+        # Kivy/TextInput, letra por letra, sin ningún multiplicador propio
+        # (se probaron variantes con aceleración -- por evento y por
+        # Clock -- y en este entorno se sintieron siempre "de golpe" o
+        # inconsistentes; el usuario pidió explícitamente letra por letra,
+        # así que la app ya no toca este camino para nada en escritorio).
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
     def keyboard_on_key_up(self, window, keycode):
-        if keycode[0] == _BKSP_KEYCODE:
+        if platform == 'android' and keycode[0] == _BKSP_KEYCODE:
+            t_up = time()
             _log_teclado(lambda:
-                f'{self._id_log()} BKSP key_up t={time():.3f} '
-                f'(ignorado; para por ausencia de key_down)'
+                f'{self._id_log()} BKSP key_up t={t_up:.3f}, '
+                f'verificar en {_BKSP_VERIFICAR_LIBERACION}s'
+            )
+            Clock.schedule_once(
+                lambda _dt: self._bksp_verificar_liberacion(t_up),
+                _BKSP_VERIFICAR_LIBERACION,
             )
         return super().keyboard_on_key_up(window, keycode)
+
+    def _bksp_verificar_liberacion(self, t_up):
+        # Si no llegó ningún key_down nuevo después de este key_up, la
+        # tecla ya está soltada de verdad -- parar ya, sin esperar
+        # _BKSP_LIBERAR completo (eso es lo que causaba el borrado de dos
+        # caracteres en un solo toque: el primer tick programado podía
+        # disparar antes de que ese timeout largo se cumpliera).
+        if self._bksp_last_down <= t_up:
+            _log_teclado(lambda:
+                f'{self._id_log()} BKSP verificar_liberacion: '
+                f'confirmado soltado (last_down={self._bksp_last_down:.3f} '
+                f'<= t_up={t_up:.3f})'
+            )
+            self._bksp_detener()
+        else:
+            _log_teclado(lambda:
+                f'{self._id_log()} BKSP verificar_liberacion: sigue '
+                f'presionada (last_down={self._bksp_last_down:.3f} > '
+                f't_up={t_up:.3f}), no para'
+            )
 
     def _bksp_tick(self, _dt):
         ahora = time()
@@ -324,11 +409,17 @@ class BorradoAcelerado:
             )
             self._bksp_detener()
             return
-        fase_palabra = sostenido >= _BKSP_UMBRAL_PALABRA
-        if not self._bksp_borrar(palabra=fase_palabra):
+        if not self._bksp_borrar():
             self._bksp_detener()
             return
-        proximo = _BKSP_INTERVALO_PALABRA if fase_palabra else _BKSP_INTERVALO_CHAR
+        avance = min(sostenido / _BKSP_ACELERACION_DURACION, 1.0)
+        proximo = _BKSP_INTERVALO_INICIAL - (
+            _BKSP_INTERVALO_INICIAL - _BKSP_INTERVALO_MIN
+        ) * avance
+        _log_teclado(lambda:
+            f'{self._id_log()} BKSP tick borro sostenido={sostenido:.3f} '
+            f'proximo={proximo:.3f} texto={self.text!r}'
+        )
         self._bksp_evento = Clock.schedule_once(self._bksp_tick, proximo)
 
     def _bksp_detener(self):
@@ -336,33 +427,14 @@ class BorradoAcelerado:
             self._bksp_evento.cancel()
             self._bksp_evento = None
 
-    def _bksp_borrar(self, palabra):
-        """Borra una unidad hacia atrás. Devuelve True si algo cambió."""
+    def _bksp_borrar(self):
+        """Borra un carácter hacia atrás. Devuelve True si algo cambió."""
         antes = self.text
         if self.selection_text:
             self.delete_selection()
             return self.text != antes
-        fin = self.cursor_index()
-        if fin <= 0:
+        if self.cursor_index() <= 0:
             return False
-        if palabra:
-            t = self.text
-            i = fin
-            # comer espacios/tabs pegados al cursor
-            while i > 0 and t[i - 1] in ' \t':
-                i -= 1
-            # un solo salto de línea por tick; si no, comer el bloque de
-            # no-espacios (la palabra) que quede detrás
-            if i > 0 and t[i - 1] == '\n':
-                i -= 1
-            else:
-                while i > 0 and not t[i - 1].isspace():
-                    i -= 1
-            if i >= fin:
-                return False
-            self.select_text(i, fin)
-            self.delete_selection()
-            return self.text != antes
         self.do_backspace()
         return self.text != antes
 
