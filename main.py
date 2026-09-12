@@ -98,8 +98,7 @@ try:
     from kivy.lang import Builder
     from kivy.clock import Clock
     from kivy.core.window import Window
-    from kivy.utils import platform
-    from kivy.uix.screenmanager import ScreenManager, NoTransition, FadeTransition
+    from kivy.uix.screenmanager import ScreenManager, NoTransition
 
     # Evita que el teclado táctil tape el campo que se está editando
     # (p.ej. "Notas adicionales" y los botones bajo él).
@@ -228,34 +227,16 @@ MDBoxLayout:
             self.notif_manager = NotificacionesManager(self.db)
 
             root = Builder.load_string(_KV)
-            # ScreenManager solo agrega de verdad al arbol de widgets la
-            # PRIMERA pantalla (dashboard, la primera del KV) -- las otras 6
-            # quedan sin agregar hasta su primera navegacion (ver
-            # ScreenManager.add_widget/on_current en kivy/uix/screenmanager.py).
-            # FadeTransition (ShaderTransition.add_screen) fuerza
-            # screen_in.size = screen_out.size y toma una foto FBO en ese
-            # mismo instante -- si esa primera navegacion es tambien la
-            # primera vez que la pantalla se agrega al arbol, la foto queda
-            # tomada ANTES de que su contenido (MDScrollView, alturas
-            # adaptativas) termine su propio primer layout: hueco pegado.
-            # NoTransition.add_screen no fuerza tamano ni toma foto, asi que
-            # no tiene ese problema. Por eso: primera visita a cada pantalla
-            # usa NoTransition (seguro), visitas siguientes (pantalla ya
-            # agregada y con layout resuelto) usan FadeTransition (fluido,
-            # sin destello). Ver _ir_a() mas abajo.
+            # NoTransition fijo en ambas plataformas: FadeTransition
+            # (ShaderTransition) toma una foto FBO de cada pantalla y las
+            # mezcla con un shader durante la animacion -- confirmado con
+            # capturas tanto en escritorio (GPU integrada vieja via ANGLE,
+            # 2026-09-10) como en Android real (2026-09-11) que a mitad de
+            # esa mezcla se ve el contenido de ambas pantallas superpuesto
+            # ("fantasma"/doble exposicion). Con NoTransition el cambio es
+            # un corte directo (sin foto ni mezcla), sin ese artefacto.
             root.ids.sm.transition = NoTransition()
             root.ids.toolbar.ids.label_title.bold = True
-            # OJO: no pre-marcar 'dashboard' como visitada aqui. Aunque se
-            # agrega al arbol de forma sincrona arriba, login_screen.py
-            # navega a dashboard con app.go_to('dashboard') justo despues de
-            # registrarse -- esa es la PRIMERA VEZ que el usuario realmente
-            # VE dashboard, y si ya estuviera marcada como visitada, _ir_a()
-            # elegiria FadeTransition ahi mismo, cayendo en la misma carrera
-            # FBO-antes-de-layout que se esta evitando en las demas
-            # pantallas (confirmado con captura: hueco en dashboard justo
-            # al salir del login, con NoTransition en todas las demas
-            # pantallas funcionando bien).
-            self._pantallas_visitadas = set()
             return root
 
         def on_start(self):
@@ -293,40 +274,32 @@ MDBoxLayout:
                 pantalla._forzar_scroll_arriba()
 
         def _ir_a(self, screen_name):
+            # sm.transition ya queda fijo en NoTransition desde build() --
+            # ver el comentario ahi de por que no se usa FadeTransition en
+            # ninguna plataforma. Pero NoTransition NO alcanza para evitar
+            # el "fantasma" por si sola: ScreenManager.on_current() arranca
+            # la transicion con una Animation(d=0) (ver TransitionBase.start
+            # en kivy/uix/screenmanager.py) que agrega la pantalla nueva de
+            # inmediato pero solo saca la vieja del arbol de widgets en el
+            # SIGUIENTE tick del Clock (Animation._update esta programado
+            # con Clock.schedule_interval, nunca corre sincrono dentro de
+            # start()) -- por un frame quedan las dos pantallas superpuestas
+            # a la vez, completamente opacas. Normalmente ese frame de mas
+            # dura ~16ms y no se nota, pero con la GPU vieja de escritorio
+            # (Intel HD 3000 via ANGLE, se ve en el log de arranque) o
+            # Android bajo carga se estira lo suficiente como para
+            # capturarse en una foto (confirmado con capturas de ambas
+            # plataformas, 2026-09-11). Forzar que la transicion complete
+            # YA, en este mismo frame, elimina la ventana de carrera del
+            # todo. sm.transition.stop() no alcanza (no dispara on_enter/
+            # on_leave, de los que dependen todas las pantallas); hace
+            # falta terminar la animacion "de verdad" via _on_complete.
             sm = self.root.ids.sm
-            primera_vez = screen_name not in self._pantallas_visitadas
-            if primera_vez or platform != 'android':
-                # FadeTransition (ShaderTransition) toma una foto FBO de
-                # cada pantalla para el crossfade -- en escritorio, sobre
-                # todo con GPUs integradas viejas (Intel HD 3000 vía ANGLE
-                # software), esa captura+mezcla puede tardar lo bastante
-                # como para sentirse como una traba momentánea, y como
-                # MDScreen no pinta fondo propio, cualquier hueco de esa
-                # foto durante la animación deja ver lo que hubiera debajo
-                # en la ventana (reportado por el usuario como "fantasma"
-                # de la pantalla anterior al navegar en escritorio,
-                # 2026-09-10). En Android el fundido ya está confirmado
-                # limpio en dispositivo real, así que se deja intacto ahí;
-                # en escritorio se usa NoTransition siempre (corte directo,
-                # sin foto ni mezcla).
-                sm.transition = NoTransition()
-            else:
-                # ShaderTransition.clearcolor (clase base de FadeTransition)
-                # define de que color se limpia el FBO donde se "fotografia"
-                # cada pantalla para el crossfade -- por defecto en Kivy es
-                # [0, 0, 0, 1] (negro), sin relacion con el tema de la app.
-                # Ninguna pantalla pinta su propio fondo (dependen del
-                # Window.clearcolor global que KivyMD ya mantiene sincronizado
-                # con el tema claro/oscuro), asi que cualquier area no
-                # cubierta por widgets dentro de esa foto se veia negra
-                # durante el crossfade (confirmado con capturas: fondo blanco
-                # en la primera visita con NoTransition -- sin Fbo, son
-                # widgets vivos sobre el Window real -- y fondo negro en
-                # visitas siguientes con FadeTransition). Se usa el mismo
-                # color que ya tiene Window.clearcolor en este momento.
-                sm.transition = FadeTransition(clearcolor=Window.clearcolor)
-            self._pantallas_visitadas.add(screen_name)
             sm.current = screen_name
+            t = sm.transition
+            if t._anim is not None:
+                t._anim.cancel(t)
+                t._on_complete()
 
         def _reajustar_layout(self, dt):
             # En el arranque en frío en Android, Window a veces reporta un
