@@ -125,20 +125,20 @@ def crear_tarjeta_acuerdo(ac, on_toggle_estado, on_ver_reunion=None, on_eliminar
     if mostrar_reunion and ac.get('reunion_asunto'):
         # Orden pedido: reunión primero, fecha debajo, chip de prioridad
         # debajo de la fecha -- y recién después el texto del acuerdo.
+        # Un solo MDLabel con '\n' en vez de dos: cada MDLabel nuevo es una
+        # textura que esta GPU (Intel HD 3000 via ANGLE, sin driver mas
+        # nuevo -- ver commit de la sombra) tarda en subir; con ~14
+        # tarjetas por pantalla, cada label de menos ahorra ~14 texturas.
+        texto_reunion = f'REUNIÓN: {ac["reunion_asunto"].upper()}'
+        if ac.get('reunion_fecha'):
+            texto_reunion += f'\n{fecha_larga(ac["reunion_fecha"])}'
         card.add_widget(MDLabel(
-            text=f'REUNIÓN: {ac["reunion_asunto"].upper()}',
+            text=texto_reunion,
             font_style='Caption',
             bold=True,
             adaptive_height=True,
             theme_text_color='Secondary',
         ))
-        if ac.get('reunion_fecha'):
-            card.add_widget(MDLabel(
-                text=fecha_larga(ac['reunion_fecha']),
-                font_style='Caption',
-                adaptive_height=True,
-                theme_text_color='Secondary',
-            ))
         card.add_widget(fila_chip)
     else:
         card.add_widget(fila_chip)
@@ -162,34 +162,27 @@ def crear_tarjeta_acuerdo(ac, on_toggle_estado, on_ver_reunion=None, on_eliminar
     resp_box = MDBoxLayout(spacing=dp(8), adaptive_height=True)
     if ac.get('responsable'):
         resp_box.add_widget(_avatar_inicial(ac['responsable']))
-    texto_resp = MDBoxLayout(orientation='vertical', adaptive_height=True)
-    texto_resp.add_widget(MDLabel(
-        text='RESPONSABLE:', font_style='Overline', bold=True, adaptive_height=True,
+    # Antes 2 MDLabel (etiqueta "RESPONSABLE:" + nombre) -- fusionados en
+    # uno solo con '\n' por la misma razon del label de reunion de arriba.
+    resp_box.add_widget(MDLabel(
+        text=f"RESPONSABLE:\n{(ac.get('responsable') or 'Sin asignar').upper()}",
+        font_style='Caption', bold=True, adaptive_height=True,
         theme_text_color='Secondary',
     ))
-    texto_resp.add_widget(MDLabel(
-        text=(ac.get('responsable') or 'Sin asignar').upper(),
-        font_style='Caption', bold=True, adaptive_height=True,
-    ))
-    resp_box.add_widget(texto_resp)
     fila_datos.add_widget(resp_box)
 
-    plazo_box = MDBoxLayout(orientation='vertical', adaptive_height=True)
-    fila_etiqueta_plazo = MDBoxLayout(adaptive_height=True, spacing=dp(2))
-    fila_etiqueta_plazo.add_widget(MDIcon(
+    plazo_box = MDBoxLayout(spacing=dp(4), adaptive_height=True)
+    plazo_box.add_widget(MDIcon(
         icon='clock-outline',
         size_hint=(None, None),
         size=(dp(16), dp(16)),
         theme_text_color='Secondary',
         font_size='16sp',
     ))
-    fila_etiqueta_plazo.add_widget(MDLabel(
-        text='FECHA LÍMITE:', font_style='Overline', adaptive_height=True,
-        theme_text_color='Secondary',
-    ))
-    plazo_box.add_widget(fila_etiqueta_plazo)
+    # Antes fila de icono+etiqueta "FECHA LÍMITE:" y debajo un segundo
+    # MDLabel con la fecha -- fusionados en uno solo junto al icono.
     plazo_box.add_widget(MDLabel(
-        text=(fecha_corta(plazo, ac.get('plazo_hora', '')) if plazo else 'Sin plazo'),
+        text=f"FECHA LÍMITE:\n{fecha_corta(plazo, ac.get('plazo_hora', '')) if plazo else 'Sin plazo'}",
         font_style='Caption', bold=True, adaptive_height=True,
         theme_text_color='Custom',
         text_color=PRIORIDAD_COLORES.get(prioridad, (0.2, 0.2, 0.2, 1)),
