@@ -32,7 +32,18 @@ contra el codigo actual del recipe python3):
    `adb shell run-as <paquete> cat files/startc_diag.txt` incluso si la
    app crashea) + fix de la condicion de carrera donde ANDROID_ARGUMENT
    puede llegar NULL de Java antes que SDL lo setee.
-3. AndroidManifest.tmpl.xml (bootstrap _sdl_common, usado por sdl2):
+3. recipes/freetype: URL de descarga a un mirror de SourceForge en vez de
+   Savannah. download.savannah.gnu.org devuelve 502 Bad Gateway de forma
+   recurrente (2026-08-03, 2026-08-08, 2026-09-08, y 3 fallos seguidos el
+   2026-09-11) siempre en el mismo punto -- bajando freetype-2.14.1.tar.gz.
+   Antes se esperaba a que el servidor se recuperara solo (siempre lo
+   hizo, en minutos u horas), pero con fallos tan seguidos ya no vale la
+   pena depender de un unico servidor cuando existe una alternativa
+   confirmada: el propio recipe de freetype en p4a ya menciona SourceForge
+   en su docstring ("seealso"), y la release 2.14.1 esta ahi
+   (sourceforge.net/projects/freetype/files/freetype2/2.14.1/), mismo
+   archivo.
+4. AndroidManifest.tmpl.xml (bootstrap _sdl_common, usado por sdl2):
    inserta el <provider> de FileProvider (para "abrir adjunto", ver
    utils/abrir_archivo.py) directo en el template. Es necesario parchear
    el template en vez de usar la opcion de buildozer.spec
@@ -188,7 +199,25 @@ static void diag_write(const char *msg) {
 else:
     print('WARN: start.c no encontrado (se parcheara al buildear cuando este disponible)')
 
-# --- 3. AndroidManifest.tmpl.xml (bootstrap _sdl_common): insertar <provider> ---
+# --- 3. recipes/freetype: usar mirror de SourceForge en vez de Savannah ---
+freetype_recipe_path = f'{base}/freetype/__init__.py'
+if os.path.exists(freetype_recipe_path):
+    c = open(freetype_recipe_path).read()
+    pat = "url = 'https://download.savannah.gnu.org/releases/freetype/freetype-{version}.tar.gz'"
+    mirror = "url = 'https://sourceforge.net/projects/freetype/files/freetype2/{version}/freetype-{version}.tar.gz/download'"
+    if pat in c:
+        c = c.replace(pat, mirror)
+        open(freetype_recipe_path, 'w').write(c)
+        print('recipes/freetype/__init__.py parcheado: URL de descarga a mirror de SourceForge')
+    elif 'sourceforge.net' in c:
+        print('recipes/freetype/__init__.py: ya usa el mirror de SourceForge')
+    else:
+        print('WARN: patron de URL de freetype no encontrado en recipes/freetype/__init__.py '
+              '(revisar si el recipe cambio)')
+else:
+    print('WARN: recipes/freetype/__init__.py no encontrado')
+
+# --- 4. AndroidManifest.tmpl.xml (bootstrap _sdl_common): insertar <provider> ---
 manifest_tmpl_path = (
     '.buildozer/android/platform/python-for-android/pythonforandroid/'
     'bootstraps/_sdl_common/build/templates/AndroidManifest.tmpl.xml'
