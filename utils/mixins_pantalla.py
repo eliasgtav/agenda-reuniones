@@ -2,6 +2,40 @@
 """Mixins compartidos entre pantallas (screens/*.py) para comportamiento que
 antes se copiaba y pegaba igual en varios archivos."""
 from kivy.clock import Clock
+from kivy.core.window import Window
+
+
+def _desvincular_hover(widget):
+    """MDCard hereda FocusBehavior -> HoverBehavior (kivymd/uix/behaviors/
+    hover_behavior.py), que en su __init__ hace
+    `Window.bind(mouse_pos=self.on_mouse_update)` -- y no hay ningun
+    __del__/on_parent/unbind en esa clase que lo deshaga. Quitar el widget
+    del arbol (clear_widgets(), remove_widget()) no rompe esa atadura: el
+    MDCard sigue vivo en memoria SOLO por esa referencia desde Window, y
+    sigue recibiendo cada movimiento de mouse de la app para siempre.
+    Listas que se reconstruyen en cada visita a la pantalla (Lista de
+    Reuniones, Seguimiento de Acuerdos) acumulan mas y mas de estos
+    "zombies" con cada navegacion -- confirmado midiendo tiempos reales:
+    Seguimiento (crea 3 MDCard por fila via crear_tarjeta_acuerdo) paso de
+    9s a 50s en 3 visitas seguidas; Lista (1 MDCard por fila) de 2s a 8s
+    (2026-09-12). Hay que desatar `on_mouse_update` de Window a mano antes
+    de soltar el widget, recorriendo tambien sus hijos (crear_tarjeta_acuerdo
+    anida varios MDCard dentro de cada tarjeta)."""
+    on_mouse_update = getattr(widget, 'on_mouse_update', None)
+    if on_mouse_update is not None:
+        Window.unbind(mouse_pos=on_mouse_update)
+    for hijo in widget.children:
+        _desvincular_hover(hijo)
+
+
+def limpiar_lista(contenedor):
+    """clear_widgets() de `contenedor` desatando primero el leak de
+    HoverBehavior de cada hijo (ver _desvincular_hover). Usar esto en vez
+    de contenedor.clear_widgets() a secas en cualquier lista que reconstruya
+    MDCard repetidamente."""
+    for hijo in list(contenedor.children):
+        _desvincular_hover(hijo)
+    contenedor.clear_widgets()
 
 
 class ScrollArribaMixin:

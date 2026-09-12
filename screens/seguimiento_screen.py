@@ -6,7 +6,7 @@ from kivy.metrics import dp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.label import MDLabel
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
-from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin
+from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin, limpiar_lista, _desvincular_hover
 
 Builder.load_string('''
 <SeguimientoScreen>:
@@ -50,7 +50,7 @@ class SeguimientoScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         # PaginacionMixin) al llegar cerca del final del scroll -- ver
         # benchmark en scripts/benchmark_carga.py.
         lista = self.ids.lista_acuerdos
-        lista.clear_widgets()
+        limpiar_lista(lista)
         items = self._cargar_pagina(reset=True)
         if not items:
             lista.add_widget(MDLabel(
@@ -100,6 +100,7 @@ class SeguimientoScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         idx = lista.children.index(card)
         ac_actualizado = dict(ac)
         ac_actualizado['estado'] = nuevo_estado
+        _desvincular_hover(card)
         lista.remove_widget(card)
         lista.add_widget(self._crear_card(ac_actualizado), index=idx)
 

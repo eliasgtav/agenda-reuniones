@@ -14,6 +14,7 @@ from utils.widgets import CampoOrtografico, CampoSimple
 from utils.fechas import fecha_larga
 from utils.voz import DictadoVoz
 from utils.notas_acuerdos import separar as separar_notas_acuerdos, MARCADOR as MARCADOR_ACUERDOS
+from utils.mixins_pantalla import limpiar_lista
 
 Builder.load_string('''
 <EnReunionScreen>:
@@ -182,7 +183,7 @@ class EnReunionScreen(MDScreen):
         app = App.get_running_app()
         self._reunion_id = getattr(app, 'reunion_activa_id', None)
         self._acuerdos = []
-        self.ids.lista_acuerdos.clear_widgets()
+        limpiar_lista(self.ids.lista_acuerdos)
         self.ids.entrada_field.text = ''
         self.ids.responsable_field.text = ''
         self.ids.plazo_field.text = ''
@@ -242,7 +243,7 @@ class EnReunionScreen(MDScreen):
 
     def _refrescar_lista(self):
         lista = self.ids.lista_acuerdos
-        lista.clear_widgets()
+        limpiar_lista(lista)
         for i, acuerdo in enumerate(self._acuerdos):
             texto_display = acuerdo['texto'] if isinstance(acuerdo, dict) else acuerdo
             card = MDCard(

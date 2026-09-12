@@ -26,7 +26,7 @@ from utils.widgets import CampoMayusculas, CampoOraciones, CampoAcuerdosNumerado
 from utils.voz import DictadoVoz
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
 from utils.fechas import fecha_larga
-from utils.mixins_pantalla import ScrollArribaMixin
+from utils.mixins_pantalla import ScrollArribaMixin, limpiar_lista
 from utils.dialogos import confirmar_eliminar
 
 
@@ -962,7 +962,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     def _cargar_acuerdos_plazo(self):
         app = App.get_running_app()
         lista = self.ids.acuerdos_plazo_list
-        lista.clear_widgets()
+        limpiar_lista(lista)
         if not self._acuerdos_visibles:
             return
         acuerdos = app.db.listar_acuerdos(self._reunion_id)

@@ -13,7 +13,7 @@ from utils.exportar import exportar_excel
 from utils.widgets import CampoOrtografico, BotonPlano
 from utils.fechas import fecha_larga
 from utils.abrir_archivo import abrir as abrir_archivo
-from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin
+from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin, limpiar_lista
 from utils.dialogos import confirmar_eliminar
 
 Builder.load_string('''
@@ -138,7 +138,7 @@ class ListaReunionesScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         # scripts/benchmark_carga.py). El resto se agrega via cargar_mas()
         # (heredado del mixin) al acercarse al final del scroll.
         lista = self.ids.lista_reuniones
-        lista.clear_widgets()
+        limpiar_lista(lista)
         items = self._cargar_pagina(reset=True)
         if not items:
             lista.add_widget(MDLabel(

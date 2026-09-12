@@ -8,7 +8,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDRaisedButton
 from utils.config import cargar as cargar_config
-from utils.mixins_pantalla import ScrollArribaMixin
+from utils.mixins_pantalla import ScrollArribaMixin, limpiar_lista
 from utils.perfil import iniciales_de
 
 Builder.load_string('''
@@ -192,7 +192,7 @@ class DashboardScreen(ScrollArribaMixin, MDScreen):
         self.actualizar_perfil()
 
         grid = self.ids.stats_grid
-        grid.clear_widgets()
+        limpiar_lista(grid)
         stats = db.stats_dashboard()
         for key, etiqueta, color in STAT_CONFIG:
             filtro = _FILTRO_POR_STAT.get(key)
