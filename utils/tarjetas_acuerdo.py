@@ -109,7 +109,8 @@ def crear_tarjeta_acuerdo(ac, on_toggle_estado, on_ver_reunion=None, on_eliminar
         size_hint_y=None,
         adaptive_height=True,
         radius=[12],
-        elevation=2,
+        line_color=(0.85, 0.85, 0.85, 1),
+        line_width=1,
         md_bg_color=(1, 1, 1, 1),
     )
 
