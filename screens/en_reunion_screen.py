@@ -8,13 +8,13 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
-from kivymd.uix.dialog import MDDialog
 from kivymd.uix.card import MDCard
 from utils.widgets import CampoOrtografico, CampoSimple
 from utils.fechas import fecha_larga
 from utils.voz import DictadoVoz
 from utils.notas_acuerdos import separar as separar_notas_acuerdos, MARCADOR as MARCADOR_ACUERDOS
-from utils.mixins_pantalla import limpiar_lista
+from utils.mixins_pantalla import limpiar_lista, _desvincular_hover
+from utils.dialogos import mostrar_info
 
 Builder.load_string('''
 <EnReunionScreen>:
@@ -173,7 +173,10 @@ Builder.load_string('''
 
 class EnReunionScreen(MDScreen):
     _reunion_id = None
-    _acuerdos = []
+    # None en vez de [] -- misma trampa de valor de clase mutable que en
+    # NuevaReunionScreen._participantes (ver ese comentario); _cargar()
+    # siempre reemplaza esto por una lista propia antes de usarse.
+    _acuerdos = None
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -183,25 +186,28 @@ class EnReunionScreen(MDScreen):
         app = App.get_running_app()
         self._reunion_id = getattr(app, 'reunion_activa_id', None)
         self._acuerdos = []
+        self._acuerdo_cards = []
         limpiar_lista(self.ids.lista_acuerdos)
         self.ids.entrada_field.text = ''
         self.ids.responsable_field.text = ''
         self.ids.plazo_field.text = ''
         self.ids.lbl_estado_voz.text = ''
 
-        if self._reunion_id:
-            r = app.db.obtener_reunion(self._reunion_id)
-            if r:
-                self.ids.lbl_asunto_activo.text = r['asunto']
-                self.ids.lbl_hora_activa.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
-                # Cargar acuerdos previos desde notas si hay
-                _, bloque = separar_notas_acuerdos(r.get('notas', ''))
-                if bloque:
-                    for linea in bloque.split('\n'):
-                        linea = linea.strip()
-                        if linea.startswith('•'):
-                            self._acuerdos.append({'texto': linea[1:].strip(), 'plazo': ''})
-                self._refrescar_lista()
+        if not self._reunion_id:
+            return
+        r = app.db.obtener_reunion(self._reunion_id)
+        if not r:
+            return
+        self.ids.lbl_asunto_activo.text = r['asunto']
+        self.ids.lbl_hora_activa.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
+        # Cargar acuerdos previos desde notas si hay
+        _, bloque = separar_notas_acuerdos(r.get('notas', ''))
+        if bloque:
+            for linea in bloque.split('\n'):
+                linea = linea.strip()
+                if linea.startswith('•'):
+                    self._acuerdos.append({'texto': linea[1:].strip(), 'plazo': ''})
+        self._refrescar_lista()
 
     def enfocar_campo(self):
         self.ids.entrada_field.focus = True
@@ -216,58 +222,86 @@ class EnReunionScreen(MDScreen):
         self.ids.lbl_estado_voz.text = ''
 
     def abrir_plazo(self):
-        from kivymd.uix.pickers import MDDatePicker
-        picker = MDDatePicker()
-        picker.bind(on_save=self._on_plazo)
-        picker.open()
-
-    def _on_plazo(self, instance, value, *args):
-        self.ids.plazo_field.text = value.strftime('%Y-%m-%d')
+        # plazo_field muestra DD/MM/AAAA (igual que Nueva Reunión y el
+        # diálogo de "Nuevo acuerdo con plazo") -- agregar_acuerdo() la
+        # convierte de vuelta a ISO para guardarla en la tabla `acuerdos`.
+        from utils.dialogos import abrir_selector_fecha
+        abrir_selector_fecha(lambda fecha_iso: setattr(
+            self.ids.plazo_field, 'text', datetime.strptime(fecha_iso, '%Y-%m-%d').strftime('%d/%m/%Y')
+        ))
 
     def agregar_acuerdo(self):
         texto = self.ids.entrada_field.text.strip()
         if not texto:
             return
         responsable = self.ids.responsable_field.text.strip()
-        plazo = self.ids.plazo_field.text.strip()
+        plazo_texto = self.ids.plazo_field.text.strip()
+        plazo_iso = plazo_texto
+        if plazo_texto:
+            try:
+                plazo_iso = datetime.strptime(plazo_texto, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except ValueError:
+                pass  # plazo_field no es readonly -- si el usuario escribio
+                # texto libre en vez de usar el calendario, se guarda tal
+                # cual (igual que antes de este cambio).
         ts = datetime.now().strftime('%H:%M')
-        plazo_label = f' — plazo: {plazo}' if plazo else ''
+        plazo_label = f' — plazo: {plazo_texto}' if plazo_texto else ''
         resp_label = f' — responsable: {responsable}' if responsable else ''
         acuerdo = f'[{ts}] {texto}{resp_label}{plazo_label}'
-        self._acuerdos.append({'texto': acuerdo, 'plazo': plazo, 'responsable': responsable})
+        nuevo = {'texto': acuerdo, 'plazo': plazo_iso, 'responsable': responsable}
+        self._acuerdos.append(nuevo)
         self.ids.entrada_field.text = ''
         self.ids.responsable_field.text = ''
         self.ids.plazo_field.text = ''
         self.ids.lbl_estado_voz.text = ''
-        self._refrescar_lista()
+        self._agregar_card(nuevo)
+
+    def _crear_card_acuerdo(self, acuerdo):
+        texto_display = acuerdo['texto'] if isinstance(acuerdo, dict) else acuerdo
+        card = MDCard(
+            orientation='horizontal',
+            padding=dp(10),
+            size_hint_y=None,
+            height=dp(60),
+            radius=[8],
+            md_bg_color=(0.94, 0.97, 1.0, 1),
+        )
+        lbl = MDLabel(
+            text=f'• {texto_display}',
+            font_style='Body2',
+            adaptive_height=True,
+        )
+        btn_del = MDIconButton(
+            icon='close',
+            size_hint_x=None,
+            width=dp(36),
+        )
+        btn_del.bind(on_release=lambda _, ac=acuerdo: self._borrar_acuerdo(ac))
+        card.add_widget(lbl)
+        card.add_widget(btn_del)
+        return card
+
+    def _agregar_card(self, acuerdo):
+        # Antes cada acuerdo nuevo reconstruia TODA la lista (limpiar_lista +
+        # una tarjeta nueva por cada acuerdo ya capturado) solo para agregar
+        # una tarjeta al final -- en una reunion larga con muchos acuerdos ya
+        # anotados, eso repetia el trabajo de todas las anteriores en cada
+        # una nueva. Aca solo se agrega la tarjeta que realmente es nueva.
+        lista = self.ids.lista_acuerdos
+        if len(self._acuerdos) == 1:
+            # Era el primer acuerdo: lo unico en la lista era el placeholder
+            # "Aún no hay acuerdos registrados.".
+            limpiar_lista(lista)
+            self._acuerdo_cards = []
+        card = self._crear_card_acuerdo(acuerdo)
+        self._acuerdo_cards.append(card)
+        lista.add_widget(card)
 
     def _refrescar_lista(self):
         lista = self.ids.lista_acuerdos
         limpiar_lista(lista)
-        for i, acuerdo in enumerate(self._acuerdos):
-            texto_display = acuerdo['texto'] if isinstance(acuerdo, dict) else acuerdo
-            card = MDCard(
-                orientation='horizontal',
-                padding=dp(10),
-                size_hint_y=None,
-                height=dp(60),
-                radius=[8],
-                md_bg_color=(0.94, 0.97, 1.0, 1),
-            )
-            lbl = MDLabel(
-                text=f'• {texto_display}',
-                font_style='Body2',
-                adaptive_height=True,
-            )
-            idx = i
-            btn_del = MDIconButton(
-                icon='close',
-                size_hint_x=None,
-                width=dp(36),
-            )
-            btn_del.bind(on_release=lambda _, i=idx: self._borrar_acuerdo(i))
-            card.add_widget(lbl)
-            card.add_widget(btn_del)
+        self._acuerdo_cards = [self._crear_card_acuerdo(a) for a in self._acuerdos]
+        for card in self._acuerdo_cards:
             lista.add_widget(card)
 
         if not self._acuerdos:
@@ -279,10 +313,23 @@ class EnReunionScreen(MDScreen):
                 theme_text_color='Secondary',
             ))
 
-    def _borrar_acuerdo(self, idx):
-        if 0 <= idx < len(self._acuerdos):
-            del self._acuerdos[idx]
-            self._refrescar_lista()
+    def _borrar_acuerdo(self, acuerdo):
+        try:
+            idx = next(i for i, a in enumerate(self._acuerdos) if a is acuerdo)
+        except StopIteration:
+            return
+        del self._acuerdos[idx]
+        card = self._acuerdo_cards.pop(idx)
+        _desvincular_hover(card)
+        self.ids.lista_acuerdos.remove_widget(card)
+        if not self._acuerdos:
+            self.ids.lista_acuerdos.add_widget(MDLabel(
+                text='Aún no hay acuerdos registrados.',
+                halign='center',
+                font_style='Body2',
+                adaptive_height=True,
+                theme_text_color='Secondary',
+            ))
 
     def guardar_en_notas(self):
         if not self._acuerdos:
@@ -367,9 +414,4 @@ class EnReunionScreen(MDScreen):
         self._dictado.toggle()
 
     def _mostrar(self, titulo, texto):
-        dialog = MDDialog(
-            title=titulo,
-            text=texto,
-            buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info(titulo, texto)

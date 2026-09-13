@@ -3,11 +3,10 @@ from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.app import App
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton
 from utils.config import cargar, guardar
 from utils.widgets import CampoMayusculas, BotonPlano
 from utils.perfil import iniciales_de
+from utils.dialogos import mostrar_info
 
 Builder.load_string('''
 <LoginScreen>:
@@ -131,14 +130,13 @@ class LoginScreen(MDScreen):
         config['apellidos'] = apellidos
         config['nombre'] = nombre_completo
         config['registrado'] = True
-        guardar(config)
+        try:
+            guardar(config)
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar tu perfil: {e}')
+            return
 
         App.get_running_app().go_to('dashboard')
 
     def _mostrar(self, titulo, texto):
-        dialog = MDDialog(
-            title=titulo,
-            text=texto,
-            buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info(titulo, texto)

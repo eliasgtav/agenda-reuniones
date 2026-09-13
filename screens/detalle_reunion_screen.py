@@ -21,13 +21,12 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.selectioncontrol import MDCheckbox
-from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.widgets import CampoMayusculas, CampoOraciones, CampoAcuerdosNumerados
 from utils.voz import DictadoVoz
 from utils.tarjetas_acuerdo import crear_tarjeta_acuerdo
 from utils.fechas import fecha_larga
 from utils.mixins_pantalla import ScrollArribaMixin, limpiar_lista
-from utils.dialogos import confirmar_eliminar
+from utils.dialogos import confirmar_eliminar, abrir_selector_fecha, abrir_selector_hora, mostrar_info
 
 
 class IconoAccionCompacto(ButtonBehavior, MDIcon):
@@ -479,13 +478,6 @@ PRIORIDADES = [
     ('alta',  'Alta',  (0.80, 0.15, 0.15, 1)),
 ]
 
-_grabando = False
-_grabacion_path = None
-_sonido_actual = None
-_sonido_archivo_id = None
-_sonido_btn = None
-
-
 class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     _reunion_id = None
     _nueva_fecha = None
@@ -494,6 +486,27 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     _load_event = None
     _dictados = None
     _acuerdos_visibles = False
+    _reunion_cache = None
+    _reunion_cache_tick = 0
+    # Estado de grabacion/reproduccion. Antes vivian como variables de
+    # MODULO (con `global` en 9 metodos) con el argumento de que "solo
+    # existe una DetalleReunionScreen reutilizada" -- pero esa razon
+    # justifica exactamente lo contrario: si solo hay una instancia que
+    # persiste durante toda la vida de la app, atributos de instancia
+    # (self._grabando, etc.) se comportan identico (mismo objeto, mismo
+    # ciclo de vida) sin quedar accesibles desde cualquier otro modulo que
+    # importe este archivo ni compartirse si alguna vez existiera una
+    # segunda instancia.
+    _grabando = False
+    _grabacion_path = None
+    _sonido_actual = None
+    _sonido_archivo_id = None
+    _sonido_btn = None
+    # 6 ticks de 10s = 60s -- igual de seguido que main.py::_check_alertas
+    # corre auto_cancelar_vencidas() (el unico cambio de estado externo a
+    # esta pantalla que _verificar_hora_reunion necesita detectar), asi que
+    # revisar la BD mas seguido que eso no adelanta nada.
+    _REFRESCO_HORA_CADA_N_TICKS = 6
 
     def on_pre_enter(self):
         from kivy.clock import Clock
@@ -519,24 +532,39 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             self._check_hora_event.cancel()
             self._check_hora_event = None
         self._detener_sonido()
-        global _grabando
-        if _grabando:
-            # _grabando/_grabacion_path son variables de modulo (no de
-            # instancia) porque solo existe una DetalleReunionScreen
-            # reutilizada para cualquier reunion via cargar() -- si se sale
-            # de la pantalla con una grabacion en curso sin detenerla aqui,
-            # al volver a abrir OTRA reunion y tocar "DETENER GRABACION" el
-            # audio se guardaba como adjunto de la reunion equivocada
-            # (self._reunion_id ya apuntaba a la nueva). Detenerla aqui
-            # mientras self._reunion_id todavia es la reunion original
-            # asegura que el archivo se adjunte a la reunion correcta.
+        if self._grabando:
+            # Si se sale de la pantalla con una grabacion en curso sin
+            # detenerla aqui, al volver a abrir OTRA reunion y tocar
+            # "DETENER GRABACION" el audio se guardaba como adjunto de la
+            # reunion equivocada (self._reunion_id ya apuntaba a la nueva).
+            # Detenerla aqui mientras self._reunion_id todavia es la reunion
+            # original asegura que el archivo se adjunte a la reunion
+            # correcta.
             self._detener_grabacion()
         self._cancelar_scroll_retries()
 
-    def _verificar_hora_reunion(self):
+    def _verificar_hora_reunion(self, reunion=None):
+        # Antes releia la reunion completa de la BD en cada tick de los 10s
+        # de Clock.schedule_interval (main.py, 496-510) solo para
+        # fecha/hora/estado -- en una reunion de horas eso es cientos de
+        # consultas identicas. Se cachea la ultima fila conocida y solo se
+        # refresca de verdad cada _REFRESCO_HORA_CADA_N_TICKS, o de inmediato
+        # cuando el llamador (_pintar_encabezado, tras una accion que SI
+        # cambio el estado) ya trae la fila fresca de mano.
         if not self._reunion_id:
             return
-        r = App.get_running_app().db.obtener_reunion(self._reunion_id)
+        if reunion is not None:
+            r = reunion
+            self._reunion_cache = r
+            self._reunion_cache_tick = 0
+        else:
+            self._reunion_cache_tick += 1
+            if self._reunion_cache is None or self._reunion_cache_tick >= self._REFRESCO_HORA_CADA_N_TICKS:
+                r = App.get_running_app().db.obtener_reunion(self._reunion_id)
+                self._reunion_cache = r
+                self._reunion_cache_tick = 0
+            else:
+                r = self._reunion_cache
         if not r:
             return
         try:
@@ -578,6 +606,11 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         r = db.obtener_reunion(self._reunion_id)
         if not r:
             return
+        # on_pre_enter llama a _verificar_hora_reunion() justo despues de
+        # cargar() -- cachear la fila ya leida aqui le ahorra un segundo
+        # obtener_reunion() identico de inmediato.
+        self._reunion_cache = r
+        self._reunion_cache_tick = 0
 
         color = COLORES_ESTADO.get(r['estado'], (0.95, 0.95, 0.95, 1))
         self.ids.header_card.md_bg_color = color
@@ -594,14 +627,18 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self.ids.btn_toggle_acuerdos.icon = 'chevron-up' if self._acuerdos_visibles else 'chevron-down'
         self._cargar_acuerdos_plazo()
 
-    def _pintar_encabezado(self):
+    def _pintar_encabezado(self, reunion=None):
         """Refresca solo la tarjeta de encabezado (asunto, fecha/hora/lugar,
         color y texto de estado) desde la BD. cargar() ademas reescribe los
         3 campos grandes de texto (DESARROLLO / OBJETIVOS / ACUERDOS) con lo
         que hay en disco -- llamarlo tras cambiar de estado o reprogramar
         descartaba en silencio lo que el usuario hubiera escrito sin pulsar
-        'GUARDAR CAMBIOS'. Estas acciones solo tocan el encabezado."""
-        r = App.get_running_app().db.obtener_reunion(self._reunion_id)
+        'GUARDAR CAMBIOS'. Estas acciones solo tocan el encabezado.
+
+        `reunion`: si el llamador ya tiene la fila recien leida (p.ej.
+        terminar_reunion(), que la necesita ademas para el correo del acta),
+        se la puede pasar para no repetir la consulta a la BD."""
+        r = reunion if reunion is not None else App.get_running_app().db.obtener_reunion(self._reunion_id)
         if not r:
             return
         self.ids.header_card.md_bg_color = COLORES_ESTADO.get(
@@ -610,7 +647,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self.ids.lbl_asunto.text = r['asunto']
         self.ids.lbl_info.text = f"{fecha_larga(r['fecha'])}  {r['hora']}  —  {r['lugar'] or 'Sin lugar'}"
         self.ids.lbl_estado.text = f"Estado: {r['estado'].upper()}"
-        self._verificar_hora_reunion()
+        self._verificar_hora_reunion(r)
 
     def _cargar_participantes(self, db):
         lista = self.ids.participantes_list
@@ -713,7 +750,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             ))
             aid = a['id']
             if a['tipo'] == 'audio':
-                icono = 'stop-circle' if _sonido_archivo_id == aid else 'play-circle'
+                icono = 'stop-circle' if self._sonido_archivo_id == aid else 'play-circle'
                 btn_play = MDIconButton(icon=icono, size_hint_x=None, width=dp(40))
                 btn_play.bind(on_release=lambda _, i=aid, r=a['ruta'], b=btn_play: self._toggle_reproducir(i, r, b))
                 fila.add_widget(btn_play)
@@ -727,11 +764,10 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             lista.add_widget(fila)
 
     def _toggle_reproducir(self, archivo_id, ruta, btn):
-        global _sonido_actual, _sonido_archivo_id
-        if _sonido_archivo_id == archivo_id and _sonido_actual:
+        if self._sonido_archivo_id == archivo_id and self._sonido_actual:
             self._detener_sonido()
             return
-        if _sonido_actual:
+        if self._sonido_actual:
             self._detener_sonido()
         if platform == 'android':
             self._reproducir_android(archivo_id, ruta, btn)
@@ -739,7 +775,6 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             self._reproducir_desktop(archivo_id, ruta, btn)
 
     def _reproducir_desktop(self, archivo_id, ruta, btn):
-        global _sonido_actual, _sonido_archivo_id, _sonido_btn
         try:
             sonido = SoundLoader.load(ruta)
         except Exception:
@@ -747,17 +782,16 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         if not sonido:
             self._mostrar_info('Reproducir audio', 'No se pudo reproducir este archivo de audio.')
             return
-        _sonido_actual = sonido
-        _sonido_archivo_id = archivo_id
-        _sonido_btn = btn
+        self._sonido_actual = sonido
+        self._sonido_archivo_id = archivo_id
+        self._sonido_btn = btn
         btn.icon = 'stop-circle'
 
         def _al_terminar(instance):
-            global _sonido_actual, _sonido_archivo_id, _sonido_btn
-            if _sonido_actual is sonido:
-                _sonido_actual = None
-                _sonido_archivo_id = None
-                _sonido_btn = None
+            if self._sonido_actual is sonido:
+                self._sonido_actual = None
+                self._sonido_archivo_id = None
+                self._sonido_btn = None
             btn.icon = 'play-circle'
 
         sonido.bind(on_stop=_al_terminar)
@@ -766,7 +800,6 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
     def _reproducir_android(self, archivo_id, ruta, btn):
         # SDL2_mixer (usado por SoundLoader) no decodifica .3gp/AMR en Android;
         # se usa el MediaPlayer nativo, que si soporta el formato de grabacion.
-        global _sonido_actual, _sonido_archivo_id, _sonido_btn
         try:
             from jnius import autoclass
             MediaPlayer = autoclass('android.media.MediaPlayer')
@@ -777,14 +810,13 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         except Exception as e:
             self._mostrar_info('Reproducir audio', f'No se pudo reproducir: {e}')
             return
-        _sonido_actual = mp
-        _sonido_archivo_id = archivo_id
-        _sonido_btn = btn
+        self._sonido_actual = mp
+        self._sonido_archivo_id = archivo_id
+        self._sonido_btn = btn
         btn.icon = 'stop-circle'
 
         def _revisar_fin(dt):
-            global _sonido_actual, _sonido_archivo_id, _sonido_btn
-            if _sonido_actual is not mp:
+            if self._sonido_actual is not mp:
                 return False
             try:
                 sigue = mp.isPlaying()
@@ -795,9 +827,9 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
                     mp.release()
                 except Exception:
                     pass
-                _sonido_actual = None
-                _sonido_archivo_id = None
-                _sonido_btn = None
+                self._sonido_actual = None
+                self._sonido_archivo_id = None
+                self._sonido_btn = None
                 btn.icon = 'play-circle'
                 return False
             return True
@@ -805,12 +837,11 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         Clock.schedule_interval(_revisar_fin, 0.5)
 
     def _detener_sonido(self):
-        global _sonido_actual, _sonido_archivo_id, _sonido_btn
-        sonido = _sonido_actual
-        btn = _sonido_btn
-        _sonido_actual = None
-        _sonido_archivo_id = None
-        _sonido_btn = None
+        sonido = self._sonido_actual
+        btn = self._sonido_btn
+        self._sonido_actual = None
+        self._sonido_archivo_id = None
+        self._sonido_btn = None
         if sonido is None:
             return
         try:
@@ -908,21 +939,19 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         config = cargar_config()
         tiene_correo = bool(config.get('correo_origen') and config.get('correo_password') and config.get('correo_destino'))
         msg_extra = '\nEnviando acta por correo...' if tiene_correo else ''
-        self._pintar_encabezado()
-        self._mostrar_info('Reunión terminada', f'La reunión fue marcada como realizada.{msg_extra}')
-        self._enviar_acta_correo(db)
-
-    def _enviar_acta_correo(self, db):
-        from utils.email_sender import enviar_acta
-        from utils.config import cargar as cargar_config
-        from kivy.clock import Clock
-        config = cargar_config()
-
-        # Si no hay correo configurado, omitir silenciosamente
-        if not config.get('correo_origen') or not config.get('correo_password') or not config.get('correo_destino'):
-            return
-
+        # Una sola lectura de la reunion recien actualizada, reusada tanto
+        # para repintar el encabezado como para el acta por correo (antes
+        # cada una hacia su propio obtener_reunion()/cargar_config()).
         reunion = db.obtener_reunion(self._reunion_id)
+        self._pintar_encabezado(reunion)
+        self._mostrar_info('Reunión terminada', f'La reunión fue marcada como realizada.{msg_extra}')
+        if tiene_correo and reunion:
+            self._enviar_acta_correo(db, reunion, config)
+
+    def _enviar_acta_correo(self, db, reunion, config):
+        from utils.email_sender import enviar_acta
+        from kivy.clock import Clock
+
         participantes = db.listar_participantes(self._reunion_id)
 
         def _resultado(ok, msg):
@@ -1236,15 +1265,12 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self._dlg_acuerdo.open()
 
     def _abrir_cal_acuerdo(self, instance, campo):
-        picker = MDDatePicker()
-        picker.bind(on_save=lambda inst, val, *a: setattr(campo, 'text', val.strftime('%d/%m/%Y')))
-        picker.open()
+        abrir_selector_fecha(lambda fecha_iso: setattr(
+            campo, 'text', datetime.strptime(fecha_iso, '%Y-%m-%d').strftime('%d/%m/%Y')
+        ))
 
     def _abrir_hora_acuerdo(self, instance, campo):
-        picker = MDTimePicker()
-        picker.bind(on_save=lambda inst, val, *a: setattr(campo, 'text', val.strftime('%H:%M')))
-        picker.open()
-        Clock.schedule_once(lambda dt: picker._switch_input(), 0.3)
+        abrir_selector_hora(lambda texto: setattr(campo, 'text', texto))
 
     def _guardar_dialogo_acuerdo(self, acuerdo_id, texto, plazo, responsable='', plazo_hora=''):
         texto = texto.strip()
@@ -1273,23 +1299,22 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self._cargar_acuerdos_plazo()
 
     def abrir_fecha_reprog(self):
-        picker = MDDatePicker()
-        picker.bind(on_save=self._on_fecha_reprog)
-        picker.open()
+        abrir_selector_fecha(self._on_fecha_reprog)
 
-    def _on_fecha_reprog(self, instance, value, *args):
-        self._nueva_fecha = value.strftime('%Y-%m-%d')
-        self.ids.btn_nueva_fecha.text = self._nueva_fecha
+    def _on_fecha_reprog(self, fecha_iso):
+        # self._nueva_fecha se queda en ISO (lo que espera
+        # db.actualizar_reunion() en reprogramar()) -- el boton, en cambio,
+        # muestra DD/MM/AAAA (antes mostraba el ISO crudo, inconsistente con
+        # el resto de los selectores de fecha de la app).
+        self._nueva_fecha = fecha_iso
+        self.ids.btn_nueva_fecha.text = datetime.strptime(fecha_iso, '%Y-%m-%d').strftime('%d/%m/%Y')
 
     def abrir_hora_reprog(self):
-        picker = MDTimePicker()
-        picker.bind(on_save=self._on_hora_reprog)
-        picker.open()
-        Clock.schedule_once(lambda dt: picker._switch_input(), 0.3)
+        abrir_selector_hora(self._on_hora_reprog)
 
-    def _on_hora_reprog(self, instance, value):
-        self._nueva_hora = value.strftime('%H:%M')
-        self.ids.btn_nueva_hora.text = self._nueva_hora
+    def _on_hora_reprog(self, texto):
+        self._nueva_hora = texto
+        self.ids.btn_nueva_hora.text = texto
 
     def reprogramar(self):
         if not self._reunion_id:
@@ -1318,38 +1343,19 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         self._pintar_encabezado()
 
     def _con_permiso_audio(self, on_granted):
-        """RECORD_AUDIO en el manifest no basta: Android 6+ exige pedirlo en
-        tiempo de ejecucion, si no toda API de audio/voz falla con
-        'insufficient_permissions'."""
-        if platform != 'android':
-            on_granted()
-            return
-        from android.permissions import check_permission, request_permissions, Permission
-        if check_permission(Permission.RECORD_AUDIO):
-            on_granted()
-            return
-
-        def _en_respuesta(permissions, resultados):
-            if resultados and all(resultados):
-                Clock.schedule_once(lambda dt: on_granted(), 0)
-            else:
-                Clock.schedule_once(lambda dt: self._mostrar_info(
-                    'Permiso requerido',
-                    'Se necesita permiso de micrófono para esta función. '
-                    'Actívalo en Ajustes del sistema > Apps > Agenda de Reuniones > Permisos > Micrófono.',
-                ), 0)
-
-        request_permissions([Permission.RECORD_AUDIO], _en_respuesta)
+        from utils.voz import solicitar_permiso_audio
+        solicitar_permiso_audio(
+            on_granted,
+            lambda mensaje: self._mostrar_info('Permiso requerido', mensaje),
+        )
 
     def toggle_grabacion(self):
-        global _grabando
-        if not _grabando:
+        if not self._grabando:
             self._con_permiso_audio(self._iniciar_grabacion)
         else:
             self._detener_grabacion()
 
     def _iniciar_grabacion(self):
-        global _grabando, _grabacion_path
         try:
             from plyer import audio
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -1360,8 +1366,8 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             else:
                 dest_dir = os.path.expanduser('~')
                 ext = 'wav'
-            _grabacion_path = os.path.join(dest_dir, f'reunion_{ts}.{ext}')
-            audio.file_path = _grabacion_path
+            self._grabacion_path = os.path.join(dest_dir, f'reunion_{ts}.{ext}')
+            audio.file_path = self._grabacion_path
             audio.start()
         except Exception as e:
             self._mostrar_info('Grabación', f'No disponible: {e}')
@@ -1371,7 +1377,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         # (auto-respuesta SMS, silenciar timbre) es funcionalidad auxiliar en
         # su propio try aparte -- antes un error ahi disparaba "Grabación: No
         # disponible" con la grabación real ya corriendo, mensaje enganoso.
-        _grabando = True
+        self._grabando = True
         self.ids.btn_grabar.text = 'DETENER GRABACIÓN'
         self.ids.btn_grabar.md_bg_color = (0.8, 0.1, 0.1, 1)
 
@@ -1380,7 +1386,7 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
             from utils import llamadas, silenciador
             mensaje = cargar_config().get('sms_auto_respuesta', '')
             if mensaje:
-                llamadas.iniciar(mensaje)
+                llamadas.iniciar(mensaje, on_permiso_denegado=self._avisar_sms_sin_permiso)
             if silenciador.tiene_permiso():
                 silenciador.silenciar()
             elif platform == 'android':
@@ -1391,6 +1397,19 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
                 'La grabación ya está en curso, pero no se pudo activar el '
                 f'silenciador de llamadas ni la auto-respuesta SMS: {e}',
             )
+
+    def _avisar_sms_sin_permiso(self):
+        # llamadas.iniciar() pide los permisos de Android de forma async --
+        # para cuando Android responde que el usuario los nego, la grabacion
+        # ya lleva rato mostrandose como "en curso" con normalidad. Sin este
+        # aviso el usuario cree que la auto-respuesta SMS esta activa cuando
+        # en realidad nunca se activo.
+        self._mostrar_info(
+            'Auto-respuesta SMS desactivada',
+            'No se concedieron los permisos de teléfono/SMS, así que la '
+            'auto-respuesta a llamadas entrantes no está activa en esta '
+            'grabación. La grabación de audio sigue en curso normalmente.',
+        )
 
     def _pedir_permiso_silencio(self):
         def _ir_a_configuracion(_x):
@@ -1411,7 +1430,6 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         dialog.open()
 
     def _detener_grabacion(self):
-        global _grabando, _grabacion_path
         try:
             from plyer import audio
             audio.stop()
@@ -1420,23 +1438,18 @@ class DetalleReunionScreen(ScrollArribaMixin, MDScreen):
         from utils import llamadas, silenciador
         llamadas.detener()
         silenciador.restaurar()
-        _grabando = False
+        self._grabando = False
         self.ids.btn_grabar.text = 'GRABAR REUNIÓN'
         self.ids.btn_grabar.md_bg_color = (0.13, 0.40, 0.75, 1)
-        if _grabacion_path:
+        if self._grabacion_path:
             App.get_running_app().db.actualizar_reunion(
-                self._reunion_id, grabacion_path=_grabacion_path
+                self._reunion_id, grabacion_path=self._grabacion_path
             )
-            nombre = os.path.basename(_grabacion_path)
+            nombre = os.path.basename(self._grabacion_path)
             App.get_running_app().db.agregar_archivo(
-                self._reunion_id, nombre, _grabacion_path, 'audio'
+                self._reunion_id, nombre, self._grabacion_path, 'audio'
             )
             self._cargar_archivos(App.get_running_app().db)
 
     def _mostrar_info(self, titulo, texto):
-        dialog = MDDialog(
-            title=titulo,
-            text=texto,
-            buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info(titulo, texto)

@@ -3,6 +3,37 @@ import threading
 from kivy.clock import Clock
 from kivy.utils import platform
 
+MENSAJE_PERMISO_MICROFONO = (
+    'Se necesita permiso de micrófono para esta función. '
+    'Actívalo en Ajustes del sistema > Apps > Agenda de Reuniones > Permisos > Micrófono.'
+)
+
+
+def solicitar_permiso_audio(on_granted, on_denegado=None):
+    """RECORD_AUDIO en el manifest no basta: Android 6+ exige pedirlo en
+    tiempo de ejecucion, si no toda API de audio/voz falla con
+    'insufficient_permissions'. Compartido entre DictadoVoz (dictado por voz)
+    y DetalleReunionScreen (grabacion de audio de la reunion) -- antes cada
+    uno tenia su propia copia identica de esta logica.
+
+    on_denegado(mensaje): opcional, se llama si el usuario niega el permiso.
+    """
+    if platform != 'android':
+        on_granted()
+        return
+    from android.permissions import check_permission, request_permissions, Permission
+    if check_permission(Permission.RECORD_AUDIO):
+        on_granted()
+        return
+
+    def _en_respuesta(permissions, resultados):
+        if resultados and all(resultados):
+            Clock.schedule_once(lambda dt: on_granted(), 0)
+        elif on_denegado:
+            Clock.schedule_once(lambda dt: on_denegado(MENSAJE_PERMISO_MICROFONO), 0)
+
+    request_permissions([Permission.RECORD_AUDIO], _en_respuesta)
+
 
 class DictadoVoz:
     """Conecta un botón de micrófono a un campo de texto: dicta con
@@ -22,30 +53,7 @@ class DictadoVoz:
     def toggle(self):
         if self._escuchando:
             return
-        self._con_permiso_audio(self._iniciar)
-
-    def _con_permiso_audio(self, on_granted):
-        """RECORD_AUDIO en el manifest no basta: Android 6+ exige pedirlo en
-        tiempo de ejecucion, si no toda API de audio/voz falla con
-        'insufficient_permissions'."""
-        if platform != 'android':
-            on_granted()
-            return
-        from android.permissions import check_permission, request_permissions, Permission
-        if check_permission(Permission.RECORD_AUDIO):
-            on_granted()
-            return
-
-        def _en_respuesta(permissions, resultados):
-            if resultados and all(resultados):
-                Clock.schedule_once(lambda dt: on_granted(), 0)
-            elif self.on_permiso_denegado:
-                Clock.schedule_once(lambda dt: self.on_permiso_denegado(
-                    'Se necesita permiso de micrófono para esta función. '
-                    'Actívalo en Ajustes del sistema > Apps > Agenda de Reuniones > Permisos > Micrófono.',
-                ), 0)
-
-        request_permissions([Permission.RECORD_AUDIO], _en_respuesta)
+        solicitar_permiso_audio(self._iniciar, self.on_permiso_denegado)
 
     def _iniciar(self):
         self._escuchando = True

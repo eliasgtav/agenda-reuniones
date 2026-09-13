@@ -34,8 +34,16 @@ def _enviar_smtp(smtp_server, smtp_port, origen, password, destino, msg):
             server.sendmail(origen, destino, msg.as_string())
 
 
-def probar_conexion(config, callback=None):
-    def _test():
+def _enviar_correo_async(config, asunto, cuerpo, mensaje_incompleto, mensaje_exito, callback=None):
+    """Arma un correo simple (From/To/Subject + cuerpo de texto plano) y lo
+    manda en un hilo aparte -- logica compartida entre probar_conexion() y
+    enviar_acta(), que antes la duplicaban casi entera (extraccion de
+    credenciales, validacion, armado de MIMEMultipart, manejo de
+    excepciones). La duplicacion ya habia divergido: enviar_acta atrapaba
+    ConnectionRefusedError con un mensaje especifico y probar_conexion no,
+    asi que esa falla exacta -- justo la que probar_conexion existe para
+    detectar -- caia en su mensaje generico "Error de conexión: {e}"."""
+    def _enviar():
         correo_origen  = config.get('correo_origen', '').strip()
         password       = config.get('correo_password', '').strip()
         correo_destino = config.get('correo_destino', '').strip()
@@ -44,24 +52,39 @@ def probar_conexion(config, callback=None):
 
         if not correo_origen or not password or not correo_destino:
             if callback:
-                callback(False, 'Completa todos los campos de correo en Perfil.')
+                callback(False, mensaje_incompleto)
             return
         try:
             msg = MIMEMultipart()
             msg['From']    = correo_origen
             msg['To']      = correo_destino
-            msg['Subject'] = 'Prueba — Agenda de Reuniones'
-            msg.attach(MIMEText('Conexión de correo configurada correctamente.', 'plain', 'utf-8'))
+            msg['Subject'] = asunto
+            msg.attach(MIMEText(cuerpo, 'plain', 'utf-8'))
             _enviar_smtp(smtp_server, smtp_port, correo_origen, password, correo_destino, msg)
             if callback:
-                callback(True, f'¡Correo de prueba enviado a {correo_destino}!')
+                callback(True, mensaje_exito)
         except smtplib.SMTPAuthenticationError:
             if callback:
                 callback(False, _MENSAJE_ERROR_AUTENTICACION)
+        except ConnectionRefusedError:
+            if callback:
+                callback(False, 'No se pudo conectar al servidor SMTP.\nVerifica el servidor y el puerto.')
         except Exception as e:
             if callback:
                 callback(False, f'Error de conexión: {e}')
-    threading.Thread(target=_test, daemon=True).start()
+    threading.Thread(target=_enviar, daemon=True).start()
+
+
+def probar_conexion(config, callback=None):
+    destino = config.get('correo_destino', '').strip()
+    _enviar_correo_async(
+        config,
+        asunto='Prueba — Agenda de Reuniones',
+        cuerpo='Conexión de correo configurada correctamente.',
+        mensaje_incompleto='Completa todos los campos de correo en Perfil.',
+        mensaje_exito=f'¡Correo de prueba enviado a {destino}!',
+        callback=callback,
+    )
 
 
 def _componer_acta(reunion, participantes, acuerdos_texto=''):
@@ -124,40 +147,12 @@ Agenda de Reuniones de Trabajo
 
 
 def enviar_acta(reunion, participantes, config, callback=None):
-    def _enviar():
-        correo_origen = config.get('correo_origen', '').strip()
-        password      = config.get('correo_password', '').strip()
-        correo_destino = config.get('correo_destino', '').strip()
-        smtp_server   = config.get('smtp_server', 'smtp.gmail.com').strip()
-        smtp_port     = int(config.get('smtp_port', 587))
-
-        if not correo_origen or not password or not correo_destino:
-            if callback:
-                callback(False, 'Configura el correo en la pantalla de Perfil.')
-            return
-
-        try:
-            asunto_email = f"Acta de Reunión: {reunion['asunto']} — {reunion['fecha']}"
-            cuerpo = _componer_acta(reunion, participantes)
-
-            msg = MIMEMultipart()
-            msg['From']    = correo_origen
-            msg['To']      = correo_destino
-            msg['Subject'] = asunto_email
-            msg.attach(MIMEText(cuerpo, 'plain', 'utf-8'))
-
-            _enviar_smtp(smtp_server, smtp_port, correo_origen, password, correo_destino, msg)
-
-            if callback:
-                callback(True, f'Acta enviada correctamente a:\n{correo_destino}')
-        except smtplib.SMTPAuthenticationError:
-            if callback:
-                callback(False, _MENSAJE_ERROR_AUTENTICACION)
-        except ConnectionRefusedError:
-            if callback:
-                callback(False, 'No se pudo conectar al servidor SMTP.\nVerifica el servidor y el puerto.')
-        except Exception as e:
-            if callback:
-                callback(False, f'Error al enviar: {e}')
-
-    threading.Thread(target=_enviar, daemon=True).start()
+    destino = config.get('correo_destino', '').strip()
+    _enviar_correo_async(
+        config,
+        asunto=f"Acta de Reunión: {reunion['asunto']} — {reunion['fecha']}",
+        cuerpo=_componer_acta(reunion, participantes),
+        mensaje_incompleto='Configura el correo en la pantalla de Perfil.',
+        mensaje_exito=f'Acta enviada correctamente a:\n{destino}',
+        callback=callback,
+    )

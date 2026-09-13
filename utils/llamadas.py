@@ -46,8 +46,15 @@ def _log(mensaje):
         pass
 
 
-def iniciar(mensaje):
-    """Empieza a escuchar llamadas entrantes. No hace nada fuera de Android."""
+def iniciar(mensaje, on_permiso_denegado=None):
+    """Empieza a escuchar llamadas entrantes. No hace nada fuera de Android.
+
+    on_permiso_denegado(): si el usuario niega alguno de los 3 permisos
+    (READ_PHONE_STATE/READ_CALL_LOG/SEND_SMS) en el dialogo de Android, la
+    respuesta llega async (mucho despues de que iniciar() ya retorno) -- sin
+    este callback, quien llama a iniciar() nunca se entera de que la
+    auto-respuesta SMS quedo inactiva, aunque en la UI la grabacion siga
+    mostrandose como "en curso" con normalidad."""
     global _mensaje_actual
     _mensaje_actual = mensaje
     if platform != 'android':
@@ -63,9 +70,11 @@ def iniciar(mensaje):
 
     def _en_respuesta(_permissions, resultados):
         _log(f'respuesta de request_permissions: {list(zip(_permissions, resultados))}')
+        from kivy.clock import Clock
         if resultados and all(resultados):
-            from kivy.clock import Clock
             Clock.schedule_once(lambda dt: _iniciar_receiver(), 0)
+        elif on_permiso_denegado is not None:
+            Clock.schedule_once(lambda dt: on_permiso_denegado(), 0)
 
     request_permissions(permisos, _en_respuesta)
 

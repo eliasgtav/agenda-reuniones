@@ -1,6 +1,7 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import os
 import shutil
+import threading
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.metrics import dp
@@ -20,6 +21,7 @@ from utils.config import cargar, guardar
 from utils.widgets import CampoMayusculas, CampoOraciones, CampoSimple, BotonPlano
 from utils.mixins_pantalla import ScrollArribaMixin
 from utils.perfil import iniciales_de
+from utils.dialogos import mostrar_info
 
 EXTENSIONES_FOTO = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 _EXTENSIONES_FOTO_TXT = 'JPG, JPEG, PNG, BMP o GIF'
@@ -335,7 +337,11 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
     def _quitar_foto(self):
         config = cargar()
         config['foto_perfil'] = ''
-        guardar(config)
+        try:
+            guardar(config)
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         self.ids.foto_img.source = ''
         self.ids.foto_img.opacity = 0
         self.ids.iniciales_lbl.opacity = 1
@@ -532,7 +538,11 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         self.ids.iniciales_lbl.opacity = 0
         config = cargar()
         config['foto_perfil'] = dest
-        guardar(config)
+        try:
+            guardar(config)
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         App.get_running_app().actualizar_foto_dashboard()
 
     def _persistir_correo(self):
@@ -543,21 +553,29 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         config['smtp_server']     = self.ids.smtp_server_field.text.strip() or 'smtp.gmail.com'
         config['smtp_port']       = 587
         guardar(config)
+        return config
 
     def guardar_correo(self):
-        self._persistir_correo()
+        try:
+            self._persistir_correo()
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         self._mostrar('Correo guardado', 'Configuración guardada. Usa "PROBAR ENVÍO" para verificar.')
 
     def probar_correo(self):
         from utils.email_sender import probar_conexion
-        from utils.config import cargar as cargar_config
         from kivy.clock import Clock
         # Antes esto llamaba a guardar_correo() (que abre su propio diálogo
         # "Correo guardado") y luego abría "Probando..." encima, y este
         # ultimo nunca se cerraba -- al llegar el resultado quedaban 3
         # diálogos apilados. Ahora se persiste sin diálogo y el de progreso
         # se descarta al llegar la respuesta.
-        self._persistir_correo()
+        try:
+            config = self._persistir_correo()
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         self._dlg_probando = MDDialog(
             title='Probando…',
             text='Enviando correo de prueba, espera unos segundos.',
@@ -573,12 +591,20 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
                 self._mostrar('✓ Éxito' if ok else '⚠ Error', msg)
             Clock.schedule_once(_final, 0)
 
-        probar_conexion(cargar_config(), callback=_resultado)
+        # config ya trae correo_password en claro (_persistir_correo() lo
+        # devuelve tal cual lo recibio guardar(), antes de cifrarlo) -- reusar
+        # ese dict evita releer y desencriptar agenda_config.json de disco
+        # otra vez para los mismos valores que ya se acaban de escribir.
+        probar_conexion(config, callback=_resultado)
 
     def guardar_sms_auto(self):
         config = cargar()
         config['sms_auto_respuesta'] = self.ids.sms_auto_field.text.strip()
-        guardar(config)
+        try:
+            guardar(config)
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         self._mostrar('Guardado', 'Mensaje automático guardado.')
 
     def guardar_perfil(self):
@@ -594,19 +620,33 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         config['nombres']   = nombres
         config['apellidos'] = apellidos
         config['nombre']    = f'{nombres} {apellidos}'
-        guardar(config)
+        try:
+            guardar(config)
+        except OSError as e:
+            self._mostrar('Error', f'No se pudo guardar: {e}')
+            return
         self._actualizar_iniciales()
         App.get_running_app().actualizar_foto_dashboard()
         self._mostrar('Guardado', f'Perfil actualizado:\n{nombres} {apellidos}')
 
     def hacer_backup(self):
         from utils.exportar import hacer_backup
-        try:
-            ruta = hacer_backup(App.get_running_app().db)
-        except Exception as e:
-            self._mostrar('Error', f'No se pudo hacer el backup: {e}')
-            return
-        self._mostrar('Backup creado', f'Se guardó en:\n{ruta}')
+        from kivy.clock import Clock
+        db = App.get_running_app().db
+
+        def _run():
+            try:
+                ruta = hacer_backup(db)
+            except Exception as e:
+                Clock.schedule_once(lambda dt: self._mostrar('Error', f'No se pudo hacer el backup: {e}'), 0)
+                return
+            Clock.schedule_once(lambda dt: self._mostrar('Backup creado', f'Se guardó en:\n{ruta}'), 0)
+
+        # shutil.copy2() del .db completo es I/O sincrono -- con una BD
+        # grande o almacenamiento lento de Android, hacerlo directo en
+        # on_release congelaba toda la UI (touch, redibujado, hasta el
+        # timer de alertas de 60s) mientras copiaba.
+        threading.Thread(target=_run, daemon=True).start()
 
     def importar_backup(self):
         if platform == 'android':
@@ -630,13 +670,23 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
 
     def _on_backup_seleccionado(self, ruta, nombre):
         import sqlite3
+        # conn.close() en un finally propio -- antes vivia despues de la
+        # query de validacion dentro del mismo try, asi que un archivo que
+        # abre pero no es un backup valido (sqlite3.connect no valida
+        # contenido, solo abre el archivo) lanzaba en la query y saltaba
+        # directo al except sin pasar por el close(), filtrando la conexion.
+        # Elegir varios archivos incorrectos en la misma sesion (flujo
+        # plausible mientras se busca el backup correcto) las iba acumulando.
+        conn = None
         try:
             conn = sqlite3.connect(ruta)
             conn.execute("SELECT 1 FROM reuniones LIMIT 1")
-            conn.close()
         except Exception:
             self._mostrar('Error', 'El archivo elegido no es un backup válido de esta app.')
             return
+        finally:
+            if conn is not None:
+                conn.close()
 
         dialog = MDDialog(
             title='¿Importar este backup?',
@@ -657,13 +707,22 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         dialog.open()
 
     def _restaurar_backup(self, ruta):
-        app = App.get_running_app()
-        try:
-            shutil.copy2(ruta, app.db.db_path)
-        except Exception as e:
-            self._mostrar('Error', f'No se pudo importar el backup: {e}')
-            return
-        self._mostrar('Backup importado', 'Cierra y vuelve a abrir la app para ver los datos importados.')
+        from kivy.clock import Clock
+        db_path = App.get_running_app().db.db_path
+
+        def _run():
+            try:
+                shutil.copy2(ruta, db_path)
+            except Exception as e:
+                Clock.schedule_once(lambda dt: self._mostrar('Error', f'No se pudo importar el backup: {e}'), 0)
+                return
+            Clock.schedule_once(lambda dt: self._mostrar(
+                'Backup importado', 'Cierra y vuelve a abrir la app para ver los datos importados.'
+            ), 0)
+
+        # Mismo motivo que hacer_backup(): copiar el .db completo es I/O
+        # sincrono que no debe correr en el hilo de UI.
+        threading.Thread(target=_run, daemon=True).start()
 
     def confirmar_borrar_bd(self):
         dialog = MDDialog(
@@ -682,22 +741,15 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
 
     def _borrar_bd(self):
         app = App.get_running_app()
-        # DELETE FROM reuniones basta: ON DELETE CASCADE (PRAGMA
-        # foreign_keys=ON en cada conexion, ver database.py::_conn) ya
-        # arrastra alertas/archivos/participantes/acuerdos -- borrarlos
-        # antes a mano por separado (como estaba, y sin incluir nunca
-        # 'acuerdos') funcionaba igual pero parecia un olvido real.
-        with app.db._conn() as conn:
-            conn.execute('DELETE FROM reuniones')
+        # Database.eliminar_todas_reuniones() borra tambien los adjuntos y
+        # grabaciones fisicas en disco (antes este metodo corria el DELETE
+        # a mano contra app.db._conn(), saltandose la clase Database y
+        # dejando huerfanos todos los archivos referenciados).
+        app.db.eliminar_todas_reuniones()
         # Evita que quede apuntando a un id que ya no existe si el usuario
         # estaba viendo/grabando una reunion justo antes de borrar todo.
         app.reunion_activa_id = None
         self._mostrar('Listo', 'Todas las reuniones han sido eliminadas.')
 
     def _mostrar(self, titulo, texto):
-        dialog = MDDialog(
-            title=titulo,
-            text=texto,
-            buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info(titulo, texto)

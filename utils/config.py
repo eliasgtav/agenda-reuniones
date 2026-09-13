@@ -114,5 +114,14 @@ def guardar(config):
     data = dict(config)
     password = data.pop(_CAMPO_PASSWORD, '')
     data[_CAMPO_PASSWORD_CIFRADO] = _cifrar_password(password)
-    with open(_config_path(), 'w', encoding='utf-8') as f:
+    ruta = _config_path()
+    # Escritura atomica (temp + replace): si el proceso se interrumpe a
+    # mitad de camino (disco lleno, app forzada a cerrar), agenda_config.json
+    # se queda con el contenido anterior completo en vez de un JSON truncado
+    # a medio escribir. La excepcion (OSError si falla el disco/permiso de
+    # Android) se deja propagar -- quien llama a guardar() debe atraparla y
+    # avisar al usuario, no se traga en silencio aqui.
+    tmp = f'{ruta}.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, ruta)

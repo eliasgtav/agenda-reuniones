@@ -33,25 +33,59 @@ def _corregir_pronunciacion(texto):
     return texto
 
 
+_engine_voz = None
+_engine_voz_ok = None  # None: no probado aun, True: sirve, False: fallo permanente (usar plyer.tts)
+_engine_voz_lock = threading.Lock()
+
+
+def _obtener_engine_voz():
+    """pyttsx3.init() + recorrer engine.getProperty('voices') buscando la
+    voz en español tarda ~5s (medido) -- antes se repetia esto en CADA
+    alerta de voz, asi que 2-3 avisos seguidos en el mismo tick de
+    verificar_alertas() (p.ej. varios acuerdos venciendo el mismo dia)
+    encadenaban ese arranque completo una vez por cada uno. El motor se
+    crea una sola vez y se reusa; si falla una vez se recuerda para no
+    reintentar un import/init lento que ya se sabe que no sirve en esta
+    plataforma (p.ej. Android, donde se cae a plyer.tts siempre)."""
+    global _engine_voz, _engine_voz_ok
+    if _engine_voz_ok is False:
+        return None
+    if _engine_voz is not None:
+        return _engine_voz
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 130)
+    for v in engine.getProperty('voices'):
+        if 'ES' in v.id or 'Spanish' in v.name:
+            engine.setProperty('voice', v.id)
+            break
+    _engine_voz = engine
+    _engine_voz_ok = True
+    return _engine_voz
+
+
 def _hablar(texto):
     def _run():
-        try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.setProperty('rate', 130)
-            voices = engine.getProperty('voices')
-            for v in voices:
-                if 'ES' in v.id or 'Spanish' in v.name:
-                    engine.setProperty('voice', v.id)
-                    break
-            engine.say(_corregir_pronunciacion(_limpiar_acentos(texto)))
-            engine.runAndWait()
-        except Exception:
+        # El lock serializa el uso del motor entre hilos de distintas
+        # alertas -- pyttsx3/SAPI no es seguro para usarse desde varios
+        # hilos a la vez (confirmado: engines concurrentes de este mismo
+        # motor podian colgar el proceso en pruebas de escritorio).
+        with _engine_voz_lock:
             try:
-                from plyer import tts
-                tts.speak(texto)
+                engine = _obtener_engine_voz()
+                if engine is None:
+                    raise RuntimeError('motor de voz no disponible')
+                engine.say(_corregir_pronunciacion(_limpiar_acentos(texto)))
+                engine.runAndWait()
             except Exception:
-                pass
+                global _engine_voz, _engine_voz_ok
+                _engine_voz = None
+                _engine_voz_ok = False
+                try:
+                    from plyer import tts
+                    tts.speak(texto)
+                except Exception:
+                    pass
     threading.Thread(target=_run, daemon=True).start()
 
 
@@ -98,6 +132,18 @@ class NotificacionesManager:
         self.db = db
 
     def verificar_alertas(self, *args):
+        # main.py llama a esto cada 60s sin parar mientras la app este
+        # abierta -- _saludo_usuario() hace un cargar_config() (leer +
+        # desencriptar agenda_config.json de disco), asi que solo vale la
+        # pena calcularlo la primera vez que de verdad hay algo que avisar
+        # en este tick, no en cada uno aunque no haya alertas pendientes.
+        saludo_cache = {}
+
+        def saludo():
+            if 'v' not in saludo_cache:
+                saludo_cache['v'] = _saludo_usuario()
+            return saludo_cache['v']
+
         for alerta in self.db.alertas_pendientes():
             minutos = _minutos_para_reunion(alerta['fecha'], alerta['hora'])
             if minutos is None:
@@ -112,7 +158,7 @@ class NotificacionesManager:
                 _avisar(
                     f'Reunión próxima — {cuando}',
                     f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}',
-                    f'{_saludo_usuario()}tiene una reunión {cuando}. Asunto: {asunto}.',
+                    f'{saludo()}tiene una reunión {cuando}. Asunto: {asunto}.',
                 )
                 self.db.marcar_alerta_enviada(alerta['id'])
         self.verificar_plazos_acuerdos()
@@ -126,7 +172,12 @@ class NotificacionesManager:
         # categoria fue la ultima notificada; "vencido" es terminal.
         from datetime import datetime
         hoy = datetime.now().strftime('%Y-%m-%d')
-        saludo = _saludo_usuario()
+        saludo_cache = {}
+
+        def saludo():
+            if 'v' not in saludo_cache:
+                saludo_cache['v'] = _saludo_usuario()
+            return saludo_cache['v']
 
         for acuerdo in self.db.acuerdos_con_plazo_pendientes():
             plazo = acuerdo['plazo']
@@ -138,15 +189,15 @@ class NotificacionesManager:
             if plazo < hoy:
                 categoria = 'vencido'
                 estado = 'VENCIDO'
-                voz = f'{saludo}acuerdo vencido{quien} de la reunión {reunion}: {texto}'
+                voz = f'{saludo()}acuerdo vencido{quien} de la reunión {reunion}: {texto}'
             elif plazo == hoy:
                 categoria = 'hoy'
                 estado = 'vence HOY'
-                voz = f'{saludo}acuerdo que vence hoy{quien} de la reunión {reunion}: {texto}'
+                voz = f'{saludo()}acuerdo que vence hoy{quien} de la reunión {reunion}: {texto}'
             else:
                 categoria = 'manana'
                 estado = 'vence mañana'
-                voz = f'{saludo}acuerdo que vence mañana{quien} de la reunión {reunion}: {texto}'
+                voz = f'{saludo()}acuerdo que vence mañana{quien} de la reunión {reunion}: {texto}'
 
             if categoria == acuerdo.get('ultima_alerta', ''):
                 continue

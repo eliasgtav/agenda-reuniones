@@ -14,7 +14,7 @@ from utils.widgets import CampoOrtografico, BotonPlano
 from utils.fechas import fecha_larga
 from utils.abrir_archivo import abrir as abrir_archivo
 from utils.mixins_pantalla import ScrollArribaMixin, PaginacionMixin, limpiar_lista
-from utils.dialogos import confirmar_eliminar
+from utils.dialogos import confirmar_eliminar, mostrar_info
 
 Builder.load_string('''
 <ListaReunionesScreen>:
@@ -247,12 +247,7 @@ class ListaReunionesScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         )
         ruta = exportar_excel(reuniones, app.db)
         if not ruta:
-            dialog = MDDialog(
-                title='Error',
-                text='Error al exportar. Verifique que openpyxl esté instalado.',
-                buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-            )
-            dialog.open()
+            mostrar_info('Error', 'Error al exportar. Verifique que openpyxl esté instalado.')
             return
 
         def _abrir(_x):
@@ -271,9 +266,4 @@ class ListaReunionesScreen(ScrollArribaMixin, PaginacionMixin, MDScreen):
         dialog.open()
 
     def _mostrar_error_apertura(self, mensaje):
-        dialog = MDDialog(
-            title='Aviso',
-            text=mensaje,
-            buttons=[MDFlatButton(text='OK', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info('Aviso', mensaje)

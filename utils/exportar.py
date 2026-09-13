@@ -59,25 +59,35 @@ _ENCABEZADOS = ['ID', 'Asunto', 'Fecha', 'Hora', 'Lugar',
                 'Estado', 'Participantes', 'Notas', 'Conclusión', 'Creado']
 
 
-def _fila_reunion(r, db):
+def _fila_reunion(r, participantes):
     """Arma una fila de exportación (misma columna/orden que _ENCABEZADOS,
     ya escapada con _valor_seguro) -- antes duplicado entre exportar_csv y
-    exportar_excel."""
-    parts = db.listar_participantes(r['id'])
-    nombres = '; '.join(p['nombre'] for p in parts)
+    exportar_excel. `participantes` es la lista ya resuelta para esta
+    reunión (ver _participantes_por_reunion)."""
+    nombres = '; '.join(p['nombre'] for p in participantes)
     return [_valor_seguro(v) for v in (
         r['id'], r['asunto'], r['fecha'], r['hora'], r['lugar'],
         r['estado'], nombres, r['notas'], r['conclusion'], r['created_at'],
     )]
 
 
+def _participantes_por_reunion(reuniones, db):
+    # Una sola consulta agrupada para todas las reuniones a exportar, en vez
+    # de una consulta 'WHERE reunion_id=?' por fila (N+1) -- con listas
+    # grandes (Exportar a Excel trae el set completo sin paginar, ver
+    # database.py::listar_reuniones) esto evitaba cientos/miles de
+    # round-trips a SQLite.
+    return db.listar_participantes_agrupados(r['id'] for r in reuniones)
+
+
 def exportar_csv(reuniones, db):
+    participantes = _participantes_por_reunion(reuniones, db)
     ruta = _ruta_salida('agenda_reuniones') + '.csv'
     with open(ruta, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(_ENCABEZADOS)
         for r in reuniones:
-            writer.writerow(_fila_reunion(r, db))
+            writer.writerow(_fila_reunion(r, participantes[r['id']]))
     return ruta
 
 
@@ -112,8 +122,9 @@ def exportar_excel(reuniones, db):
     for i, ancho in enumerate(anchos, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ancho
 
+    participantes = _participantes_por_reunion(reuniones, db)
     for r in reuniones:
-        ws.append(_fila_reunion(r, db))
+        ws.append(_fila_reunion(r, participantes[r['id']]))
         color = COLORES_ESTADO.get(r['estado'], 'FFFFFFFF')
         fill = PatternFill('solid', fgColor=color)
         for cell in ws[ws.max_row]:

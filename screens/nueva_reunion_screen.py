@@ -1,4 +1,5 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
+from datetime import datetime
 from kivy.lang import Builder
 from kivy.app import App
 from kivy.clock import Clock
@@ -6,14 +7,13 @@ from kivy.factory import Factory
 from kivy.uix.behaviors import ButtonBehavior
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.button import MDFlatButton, MDRaisedButton, MDIconButton
-from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel, MDIcon
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.selectioncontrol import MDSwitch
-from kivymd.uix.pickers import MDDatePicker, MDTimePicker
 from utils.voz import DictadoVoz
 from utils.widgets import CampoMayusculas
 from utils.mixins_pantalla import ScrollArribaMixin
+from utils.dialogos import abrir_selector_fecha, abrir_selector_hora, mostrar_info
 
 
 class BotonQuitarParticipante(ButtonBehavior, MDIcon):
@@ -292,7 +292,12 @@ def _chip_participante(nombre, on_remove):
 
 
 class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
-    _participantes = []
+    # None en vez de [] -- una lista literal como valor de clase es
+    # compartida por TODAS las instancias (aqui inofensivo porque solo
+    # existe una NuevaReunionScreen y _reset_form() la reemplaza por una
+    # propia en cada entrada a la pantalla, pero es la misma trampa clasica
+    # de Python que _dictados ya evita justo debajo).
+    _participantes = None
     _dictados = None
     _load_event = None
 
@@ -352,21 +357,15 @@ class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
         self.ids.btn_virtual.md_bg_color = seleccionado if valor == 'virtual' else no_seleccionado
 
     def abrir_fecha(self):
-        picker = MDDatePicker()
-        picker.bind(on_save=self._on_fecha)
-        picker.open()
-
-    def _on_fecha(self, instance, value, *args):
-        self.ids.fecha_field.text = value.strftime('%Y-%m-%d')
+        # fecha_field muestra DD/MM/AAAA (igual que el diálogo de "Nuevo
+        # acuerdo con plazo") -- guardar() la convierte de vuelta a ISO al
+        # crear la reunión.
+        abrir_selector_fecha(lambda fecha_iso: setattr(
+            self.ids.fecha_field, 'text', datetime.strptime(fecha_iso, '%Y-%m-%d').strftime('%d/%m/%Y')
+        ))
 
     def abrir_hora(self):
-        picker = MDTimePicker()
-        picker.bind(on_save=self._on_hora)
-        picker.open()
-        Clock.schedule_once(lambda dt: picker._switch_input(), 0.3)
-
-    def _on_hora(self, instance, value):
-        self.ids.hora_field.text = value.strftime('%H:%M')
+        abrir_selector_hora(lambda texto: setattr(self.ids.hora_field, 'text', texto))
 
     def agregar_participante_ui(self):
         nombre = self.ids.nuevo_participante.text.strip()
@@ -393,10 +392,14 @@ class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
             self.ids.asunto_field.error = True
             return
 
-        fecha = self.ids.fecha_field.text.strip()
-        if not fecha:
+        fecha_texto = self.ids.fecha_field.text.strip()
+        if not fecha_texto:
             self._mostrar_error('Selecciona una fecha para la reunión.')
             return
+        # fecha_field muestra DD/MM/AAAA (ver abrir_fecha) -- la BD guarda
+        # fecha en ISO 'YYYY-MM-DD' (necesario para que comparaciones tipo
+        # "plazo < hoy" y el ORDER BY por fecha funcionen bien en SQLite).
+        fecha = datetime.strptime(fecha_texto, '%d/%m/%Y').strftime('%Y-%m-%d')
 
         hora = self.ids.hora_field.text.strip() or '09:00'
         lugar = self.ids.lugar_field.text.strip()
@@ -419,22 +422,12 @@ class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
         self._mostrar_ok()
 
     def _mostrar_error(self, texto):
-        dialog = MDDialog(
-            title='Error',
-            text=texto,
-            buttons=[MDFlatButton(text='ACEPTAR', on_release=lambda x: dialog.dismiss())],
-        )
-        dialog.open()
+        mostrar_info('Error', texto, boton='ACEPTAR')
 
     def _mostrar_ok(self):
-        dialog = MDDialog(
-            title='Reunión guardada',
-            text='La reunión fue registrada exitosamente.',
-            buttons=[
-                MDFlatButton(
-                    text='ACEPTAR',
-                    on_release=lambda x: (dialog.dismiss(), App.get_running_app().go_to('dashboard')),
-                )
-            ],
+        mostrar_info(
+            'Reunión guardada',
+            'La reunión fue registrada exitosamente.',
+            boton='ACEPTAR',
+            on_cerrar=lambda: App.get_running_app().go_to('dashboard'),
         )
-        dialog.open()

@@ -799,7 +799,15 @@ class CampoAcuerdosNumerados(CampoOraciones):
 
         if substring:
             partes = substring.split('\n')
-            numero = self._siguiente_numero()
+            # _siguiente_numero() recorre y regex-matchea TODO el texto del
+            # campo -- con esto sembrado en cada llamada a insert_text()
+            # (una por cada tecla normal, no solo Enter), escribir una
+            # oración larga repetia ese recorrido completo en cada letra
+            # aunque el numero no se fuera a usar. Solo hace falta cuando
+            # esta por arrancar una linea numerada (justo abajo) o cuando lo
+            # insertado trae saltos de línea propios (pegado/dictado).
+            necesita_numero = (not self._linea_actual() and partes[0].strip()) or len(partes) > 1
+            numero = self._siguiente_numero() if necesita_numero else None
             # La línea donde está el cursor está vacía en este momento --
             # ya sea porque el campo entero está vacío (recién enfocado
             # sin haber alcanzado a sembrar el "1.- " a tiempo, o borrado

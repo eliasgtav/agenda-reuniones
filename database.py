@@ -187,9 +187,48 @@ class Database:
         with self._conn() as conn:
             return [dict(r) for r in conn.execute(query, params).fetchall()]
 
+    @staticmethod
+    def _borrar_archivos_fisicos(rutas):
+        # Best-effort: un archivo ya movido/borrado a mano por el usuario no
+        # debe impedir que el borrado en la BD (la parte que importa) siga
+        # adelante.
+        for ruta in rutas:
+            if not ruta:
+                continue
+            try:
+                os.remove(ruta)
+            except OSError:
+                pass
+
     def eliminar_reunion(self, reunion_id):
         with self._conn() as conn:
+            rutas = [r['ruta'] for r in conn.execute(
+                'SELECT ruta FROM archivos WHERE reunion_id=?', (reunion_id,)
+            ).fetchall()]
+            grabacion = conn.execute(
+                'SELECT grabacion_path FROM reuniones WHERE id=?', (reunion_id,)
+            ).fetchone()
+            if grabacion and grabacion['grabacion_path']:
+                rutas.append(grabacion['grabacion_path'])
             conn.execute('DELETE FROM reuniones WHERE id=?', (reunion_id,))
+        self._borrar_archivos_fisicos(rutas)
+
+    def eliminar_todas_reuniones(self):
+        # Antes screens/perfil_screen.py corria 'DELETE FROM reuniones' a
+        # mano contra app.db._conn() en vez de pasar por Database -- ademas
+        # de saltarse la clase que se supone es el unico punto de acceso a
+        # la BD, eso dejaba huerfanos en disco todos los adjuntos y
+        # grabaciones (ON DELETE CASCADE limpia las filas de 'archivos' pero
+        # nunca toco el archivo fisico que esa fila apuntaba).
+        with self._conn() as conn:
+            rutas = [r['ruta'] for r in conn.execute('SELECT ruta FROM archivos').fetchall()]
+            rutas += [
+                r['grabacion_path'] for r in conn.execute(
+                    "SELECT grabacion_path FROM reuniones WHERE grabacion_path != ''"
+                ).fetchall()
+            ]
+            conn.execute('DELETE FROM reuniones')
+        self._borrar_archivos_fisicos(rutas)
 
     def stats_dashboard(self):
         hoy = datetime.now().strftime('%Y-%m-%d')
@@ -230,6 +269,25 @@ class Database:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def listar_participantes_agrupados(self, reunion_ids):
+        """Como listar_participantes() pero para varias reuniones a la vez,
+        agrupados en un dict {reunion_id: [participantes]} -- usado por
+        utils/exportar.py para no hacer una consulta por fila al exportar N
+        reuniones (antes N consultas 'WHERE reunion_id=?' separadas)."""
+        reunion_ids = list(reunion_ids)
+        if not reunion_ids:
+            return {}
+        with self._conn() as conn:
+            placeholders = ','.join('?' * len(reunion_ids))
+            rows = conn.execute(
+                f'SELECT * FROM participantes WHERE reunion_id IN ({placeholders}) ORDER BY nombre',
+                reunion_ids,
+            ).fetchall()
+        agrupado = {rid: [] for rid in reunion_ids}
+        for row in rows:
+            agrupado[row['reunion_id']].append(dict(row))
+        return agrupado
+
     def actualizar_asistencia(self, participante_id, asistio):
         with self._conn() as conn:
             conn.execute(
@@ -258,7 +316,12 @@ class Database:
 
     def eliminar_archivo(self, archivo_id):
         with self._conn() as conn:
+            fila = conn.execute(
+                'SELECT ruta FROM archivos WHERE id=?', (archivo_id,)
+            ).fetchone()
             conn.execute('DELETE FROM archivos WHERE id=?', (archivo_id,))
+        if fila:
+            self._borrar_archivos_fisicos([fila['ruta']])
 
     # ── Alertas ────────────────────────────────────────────────────────────────
 
