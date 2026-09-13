@@ -4,20 +4,11 @@ echo  Compilando Agenda de Reuniones - Windows
 echo  (c) Elias Gaytan Alvino
 echo =========================================
 
-pip install pyinstaller kivymd kivy openpyxl plyer pillow pyttsx3
+pip install -r requirements.txt pyinstaller
 
-pyinstaller ^
-    --onefile ^
-    --windowed ^
-    --name "AgendaReuniones" ^
-    --add-data "screens;screens" ^
-    --add-data "utils;utils" ^
-    --hidden-import kivymd ^
-    --hidden-import plyer ^
-    --hidden-import openpyxl ^
-    --hidden-import pyttsx3 ^
-    main.py
+REM La logica real de empaquetado vive en build_windows.py -- agrega a mano
+REM los .dll de ANGLE/SDL2/GLEW y --collect-all kivymd, sin los cuales el
+REM .exe compila pero se cae al abrir (ver comentario en ese archivo).
+python build_windows.py
 
-echo.
-echo Ejecutable generado en: dist\AgendaReuniones.exe
 pause

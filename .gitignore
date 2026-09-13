@@ -3,7 +3,9 @@ __pycache__/
 *.pyo
 .buildozer/
 bin/
+build/
 dist/
+*.spec
 *.db
 *.log
 agenda_config.json
