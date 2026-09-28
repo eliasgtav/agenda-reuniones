@@ -9,6 +9,12 @@ _DEFAULTS = {
     'nombre': 'Usuario',
     'foto_perfil': '',
     'sms_auto_respuesta': 'Estoy en una reunión, te devuelvo la llamada en cuanto termine.',
+    # Cache local del ultimo estado de suscripcion confirmado con Google Play
+    # (ver utils/suscripcion.py) -- 'suscripcion_activa' es lo que se guardo
+    # en la ULTIMA verificacion en linea, no el estado en vivo; permite que
+    # esta_activa() decida sin red (activa, o en periodo de gracia offline).
+    'suscripcion_activa': False,
+    'suscripcion_ultima_verificacion': '',
 }
 
 # La contraseña de aplicación de correo NUNCA se guarda en texto plano en

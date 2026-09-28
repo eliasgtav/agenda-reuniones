@@ -205,6 +205,26 @@ Builder.load_string('''
                 pos_hint: {"center_x": .5}
                 on_release: root.guardar_sms_auto()
 
+            # ── Suscripción ────────────────────────────────────────────
+            MDLabel:
+                text: "Mi Suscripción"
+                font_style: "Subtitle1"
+                adaptive_height: True
+
+            MDLabel:
+                id: lbl_estado_suscripcion
+                text: ""
+                font_style: "Caption"
+                adaptive_height: True
+                theme_text_color: "Secondary"
+
+            BotonPlano:
+                text: "GESTIONAR SUSCRIPCIÓN"
+                pos_hint: {"center_x": .5}
+                _radius: dp(14)
+                md_bg_color: 0.13, 0.40, 0.75, 1
+                on_release: root.gestionar_suscripcion()
+
             # ── Copia de seguridad ─────────────────────────────────────
             MDLabel:
                 text: "Copia de seguridad"
@@ -287,7 +307,26 @@ class PerfilScreen(ScrollArribaMixin, MDScreen):
         self.ids.correo_destino_field.text  = config.get('correo_destino', '')
         self.ids.smtp_server_field.text     = config.get('smtp_server', 'smtp.gmail.com')
         self.ids.sms_auto_field.text        = config.get('sms_auto_respuesta', '')
+        self._pintar_estado_suscripcion()
         self._forzar_scroll_arriba()
+
+    def _pintar_estado_suscripcion(self):
+        from utils import suscripcion
+        if platform != 'android':
+            self.ids.lbl_estado_suscripcion.text = 'Suscripción: no aplica en modo desarrollo (Windows).'
+        elif suscripcion.en_gracia_offline():
+            self.ids.lbl_estado_suscripcion.text = 'Suscripción: activa (sin conexión para confirmar, en periodo de gracia).'
+        elif suscripcion.esta_activa():
+            self.ids.lbl_estado_suscripcion.text = 'Suscripción: activa.'
+        else:
+            self.ids.lbl_estado_suscripcion.text = 'Suscripción: no activa.'
+
+    def gestionar_suscripcion(self):
+        from utils import suscripcion
+        if platform != 'android':
+            self._mostrar('Suscripción', 'La gestión de suscripción solo está disponible en la app de Android.')
+            return
+        suscripcion.abrir_gestion_suscripcion()
 
     def _actualizar_iniciales(self):
         nombres   = self.ids.nombres_field.text.strip()
