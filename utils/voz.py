@@ -106,7 +106,15 @@ class DictadoVoz:
             import speech_recognition as sr
             r = sr.Recognizer()
             r.pause_threshold = 1.5
-            with sr.Microphone() as source:
+            # chunk_size grande (default de PyAudio: 1024) -- con el chico,
+            # este hilo tiene que atender una lectura de audio cada ~20-60ms;
+            # en equipos viejos/lentos el trabajo de fondo continuo de
+            # KivyMD (ripple, sombras, temas) le gana tiempo de CPU seguido
+            # y el hilo se queda esperando datos que nunca llegan a tiempo
+            # -- confirmado reproduciendolo (con MDApp cuelga, con
+            # kivy.app.App normal NO cuelga) y midiendo: chunk_size=1024
+            # se cuelga con frecuencia, 16384 no se colgo en varias corridas.
+            with sr.Microphone(chunk_size=65536) as source:
                 r.adjust_for_ambient_noise(source, duration=0.5)
                 audio = r.listen(source, timeout=10, phrase_time_limit=60)
             texto = r.recognize_google(audio, language='es-ES')
