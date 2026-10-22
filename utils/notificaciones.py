@@ -1,6 +1,7 @@
 # © 2024 Elías Gaytan Alvino — Todos los derechos reservados.
 import threading
 from datetime import datetime, timedelta
+from kivy.utils import platform
 from utils.config import cargar as cargar_config
 
 
@@ -64,7 +65,74 @@ def _obtener_engine_voz():
     return _engine_voz
 
 
+_tts_android = None
+_tts_android_listo = threading.Event()
+_tts_android_listener = None  # referencia viva: si jnius lo libera, onInit nunca llega
+
+
+def _iniciar_tts_android():
+    """TextToSpeech nativo de Android, creado UNA vez y reusado. Antes se
+    usaba plyer.tts, que crea un TextToSpeech nuevo en cada llamada y habla
+    sin esperar a que el motor conecte -- visto con adb logcat (HONOR
+    Magic6 Lite, 2026-10-22): "speak failed: not bound to TTS engine" en
+    los primeros intentos, y solo sonaba si el motor conectaba dentro de
+    los ~10s de reintentos de plyer; si tardaba mas, la alerta se perdia
+    sin aviso. plyer ademas fija Locale.US (ingles), que solo no aplicaba
+    porque ese setLanguage tambien fallaba por lo mismo. Con targetSdk >= 30
+    algunos telefonos tampoco dejan ver el motor de voz sin el <queries>
+    TTS_SERVICE del manifest (ver scripts/patch_p4a.py, parche #5)."""
+    global _tts_android, _tts_android_listener
+    from jnius import autoclass, PythonJavaClass, java_method
+
+    TextToSpeech = autoclass('android.speech.tts.TextToSpeech')
+    Locale = autoclass('java.util.Locale')
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+    class _AlIniciar(PythonJavaClass):
+        __javainterfaces__ = ['android/speech/tts/TextToSpeech$OnInitListener']
+        __javacontext__ = 'app'
+
+        @java_method('(I)V')
+        def onInit(self, status):
+            if status != TextToSpeech.SUCCESS:
+                return
+            # Idioma del telefono si ya es espanol (respeta es-MX, es-PE,
+            # etc.); si no, espanol generico. < 0 = LANG_MISSING_DATA /
+            # LANG_NOT_SUPPORTED.
+            local = Locale.getDefault()
+            if local.getLanguage() != 'es' or _tts_android.setLanguage(local) < 0:
+                _tts_android.setLanguage(Locale('es'))
+            _tts_android_listo.set()
+
+    _tts_android_listener = _AlIniciar()
+    _tts_android = TextToSpeech(PythonActivity.mActivity, _tts_android_listener)
+
+
+def _hablar_android(texto):
+    if _tts_android is None:
+        _iniciar_tts_android()
+    if not _tts_android_listo.wait(15):
+        return
+    from jnius import autoclass
+    TextToSpeech = autoclass('android.speech.tts.TextToSpeech')
+    String = autoclass('java.lang.String')
+    # QUEUE_ADD: varias alertas en el mismo tick se dicen una tras otra en
+    # vez de cortarse entre si.
+    _tts_android.speak(String(texto), TextToSpeech.QUEUE_ADD, None, String('alerta'))
+
+
 def _hablar(texto):
+    if platform == 'android':
+        def _run_android():
+            with _engine_voz_lock:
+                try:
+                    _hablar_android(texto)
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+        threading.Thread(target=_run_android, daemon=True).start()
+        return
+
     def _run():
         # El lock serializa el uso del motor entre hilos de distintas
         # alertas -- pyttsx3/SAPI no es seguro para usarse desde varios

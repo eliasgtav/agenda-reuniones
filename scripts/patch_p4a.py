@@ -60,6 +60,9 @@ contra el codigo actual del recipe python3):
    "android.extra_manifest_xml": ese inserta dentro de <manifest>, como
    hermano de <application>, pero <provider> debe ser hijo de
    <application> segun el schema de Android.
+5. AndroidManifest.tmpl.xml: inserta <queries> TTS_SERVICE antes de
+   <application> para que TextToSpeech vea los motores de voz instalados
+   (package visibility, targetSdk >= 30). Alertas de voz en Android.
 """
 
 import os
@@ -260,3 +263,33 @@ if os.path.exists(manifest_tmpl_path):
               '(revisar si el template de p4a cambio)')
 else:
     print(f'WARN: {manifest_tmpl_path} no encontrado')
+
+# --- 5. AndroidManifest.tmpl.xml: <queries> TTS_SERVICE (alertas de voz) ---
+# Con targetSdk >= 30 Android oculta a la app los demas paquetes (package
+# visibility): sin este <queries>, TextToSpeech no encuentra ningun motor de
+# voz instalado (Google TTS, Samsung TTS...), onInit llega con ERROR y las
+# alertas de voz no suenan nunca -- ver utils/notificaciones.py. (En el HONOR
+# de pruebas Google TTS ya es forceQueryable y no hacia falta, pero no todos
+# los fabricantes lo marcan asi.) <queries>
+# es hijo de <manifest> (hermano de <application>), por eso se inserta
+# justo antes de la etiqueta de apertura <application.
+if os.path.exists(manifest_tmpl_path):
+    c = open(manifest_tmpl_path).read()
+    QUERIES_XML = '''    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+'''
+    pos = c.find('<application')
+    if 'android.intent.action.TTS_SERVICE' in c:
+        print('AndroidManifest.tmpl.xml: ya tiene el <queries> de TTS_SERVICE')
+    elif pos != -1:
+        pos = c.rfind('\n', 0, pos) + 1
+        c = c[:pos] + QUERIES_XML + c[pos:]
+        open(manifest_tmpl_path, 'w').write(c)
+        print('AndroidManifest.tmpl.xml parcheado: <queries> de TTS_SERVICE insertado')
+    else:
+        print('WARN: etiqueta "<application" no encontrada en AndroidManifest.tmpl.xml '
+              '(revisar si el template de p4a cambio)')
