@@ -117,7 +117,6 @@ try:
     from screens.login_screen import LoginScreen
     from screens.en_reunion_screen import EnReunionScreen
     from screens.seguimiento_screen import SeguimientoScreen
-    from screens.suscripcion_screen import SuscripcionScreen
 
     _KV = '''
 MDBoxLayout:
@@ -171,9 +170,6 @@ MDBoxLayout:
 
         SeguimientoScreen:
             name: "seguimiento"
-
-        SuscripcionScreen:
-            name: "suscripcion"
 
     MDBoxLayout:
         id: bottom_bar
@@ -257,14 +253,6 @@ MDBoxLayout:
                 self.root.ids.bottom_bar.opacity = 0
                 self.root.ids.bottom_bar.size_hint_y = None
                 self.root.ids.bottom_bar.height = 0
-            else:
-                # go_to() (no sm.current directo) para que pase por el filtro
-                # de suscripcion.esta_activa() de abajo -- si el usuario ya
-                # esta registrado pero no tiene suscripcion activa, termina
-                # en la pantalla de suscripcion en vez de Dashboard.
-                self.go_to('dashboard')
-            from utils import suscripcion
-            suscripcion.iniciar(on_cambio_estado=self._revisar_acceso)
             Clock.schedule_interval(self._check_alertas, 60)
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
@@ -345,58 +333,14 @@ MDBoxLayout:
             )
 
         def go_to(self, screen_name):
-            # Punto unico de navegacion (todas las pantallas navegan via
-            # app.go_to(), nunca tocan sm.current directo) -- por eso este es
-            # el lugar correcto para el filtro de suscripcion: sin
-            # suscripcion activa, CUALQUIER destino que no sea login termina
-            # en la pantalla de suscripcion en vez del que se pidio.
-            from utils import suscripcion
-            if screen_name not in ('login', 'suscripcion') and not suscripcion.esta_activa():
-                screen_name = 'suscripcion'
             sm = self.root.ids.sm
             if sm.current != screen_name:
                 self._ir_a(screen_name)
-            bar = self.root.ids.bottom_bar
-            if screen_name in ('login', 'suscripcion'):
-                bar.opacity = 0
-                bar.size_hint_y = None
-                bar.height = 0
-            else:
+            if screen_name != 'login':
+                bar = self.root.ids.bottom_bar
                 bar.opacity = 1
                 bar.size_hint_y = None
                 bar.height = '56dp'
-
-        def _revisar_acceso(self):
-            # Callback de utils.suscripcion cuando termina de confirmar (o
-            # reintentar confirmar) el estado real con Google Play -- puede
-            # llegar mucho despues del arranque (conexion lenta), asi que
-            # hay que reaccionar aunque el usuario ya este navegando. Llega
-            # desde un hilo de la Billing Library: se pasa al hilo de Kivy.
-            Clock.schedule_once(lambda dt: self._revisar_acceso_ui(), 0)
-
-        def _revisar_acceso_ui(self):
-            from utils.config import cargar
-            if not cargar().get('registrado'):
-                return
-            sm = self.root.ids.sm
-            from utils import suscripcion
-            activa = suscripcion.esta_activa()
-            if activa and sm.current == 'suscripcion':
-                self.go_to('dashboard')
-            elif sm.current == 'suscripcion':
-                # Billing recien conectado: la pantalla ya pudo haber pedido
-                # los precios antes de la conexion y quedarse con el texto
-                # generico -- se vuelven a pedir.
-                sm.get_screen('suscripcion')._refrescar()
-            elif not activa and sm.current not in ('suscripcion', 'login'):
-                self.go_to('suscripcion')
-
-        def on_resume(self):
-            # Revalida al volver del segundo plano (Android) -- por si Play
-            # Store confirmo un pago pendiente, o la suscripcion vencio,
-            # mientras la app no estaba en primer plano.
-            from utils import suscripcion
-            suscripcion.iniciar(on_cambio_estado=self._revisar_acceso)
 
         _PARENT_SCREEN = {
             'lista_reuniones': 'dashboard',

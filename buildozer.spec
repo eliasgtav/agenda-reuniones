@@ -7,7 +7,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 icon.filename = %(source.dir)s/data/icon.png
 
-requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,et_xmlfile,plyer,pillow,pyspellchecker,android,sqlite3,openssl,sjbillingclient
+requirements = python3,kivy==2.3.1,kivymd==1.2.0,openpyxl,et_xmlfile,plyer,pillow,pyspellchecker,android,sqlite3,openssl
 
 # Debe coincidir con la rama que se clona/parchea en build_apk.yml (p4a
 # master sin pin, ver scripts/patch_p4a.py). Si no coincide, buildozer
@@ -18,7 +18,7 @@ p4a.branch = master
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,READ_CONTACTS,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS,CAMERA,READ_PHONE_STATE,READ_CALL_LOG,SEND_SMS,ACCESS_NOTIFICATION_POLICY,com.android.vending.BILLING
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,READ_CONTACTS,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS,CAMERA,READ_PHONE_STATE,READ_CALL_LOG,SEND_SMS,ACCESS_NOTIFICATION_POLICY
 android.api = 34
 android.minapi = 26
 android.ndk = 25b
@@ -36,7 +36,7 @@ android.archs = arm64-v8a
 # ver scripts/patch_p4a.py, parche #3). Se inserta parcheando el template
 # de p4a directamente.
 android.enable_androidx = True
-android.gradle_dependencies = androidx.core:core:1.12.0,com.android.billingclient:billing:8.0.0
+android.gradle_dependencies = androidx.core:core:1.12.0
 android.add_resources = android_res
 
 [buildozer]
