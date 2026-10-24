@@ -18,7 +18,7 @@ p4a.branch = master
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,READ_CONTACTS,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS,CAMERA,READ_PHONE_STATE,READ_CALL_LOG,SEND_SMS,ACCESS_NOTIFICATION_POLICY
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,RECORD_AUDIO,READ_CONTACTS,VIBRATE,RECEIVE_BOOT_COMPLETED,POST_NOTIFICATIONS,USE_EXACT_ALARM,SCHEDULE_EXACT_ALARM,CAMERA,READ_PHONE_STATE,READ_CALL_LOG,SEND_SMS,ACCESS_NOTIFICATION_POLICY
 android.api = 34
 android.minapi = 26
 android.ndk = 25b
@@ -38,6 +38,10 @@ android.archs = arm64-v8a
 android.enable_androidx = True
 android.gradle_dependencies = androidx.core:core:1.12.0
 android.add_resources = android_res
+# Codigo Java propio (alarmas de AlarmManager para las alertas con la app
+# cerrada, ver utils/alarmas.py). El receiver se declara en el manifest via
+# scripts/patch_p4a.py (parche #6).
+android.add_src = java_src
 
 [buildozer]
 log_level = 2

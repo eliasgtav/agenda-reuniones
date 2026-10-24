@@ -451,13 +451,16 @@ class Database:
             ).fetchone()
             return row['c'] if row else 0
 
-    def acuerdos_con_plazo_pendientes(self):
+    def acuerdos_con_plazo_pendientes(self, solo_proximos=True):
         # ultima_alerta != 'vencido' (no alerta_enviada=0) -- un acuerdo debe
         # poder seguir apareciendo aqui tras avisar "vence manana"/"vence
         # HOY", para que verificar_plazos_acuerdos() lo vuelva a notificar
         # cuando cambie de categoria. "vencido" es terminal, ahi si se deja
         # de traer. Ver utils/notificaciones.py::verificar_plazos_acuerdos.
+        # solo_proximos=False: tambien los de plazo lejano, para programar
+        # sus alarmas de Android (NotificacionesManager.programar_alarmas).
         manana = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        hasta = manana if solo_proximos else '9999-12-31'
         with self._conn() as conn:
             rows = conn.execute('''
                 SELECT a.id, a.texto, a.plazo, a.ultima_alerta, a.responsable,
@@ -466,7 +469,7 @@ class Database:
                 JOIN reuniones r ON r.id = a.reunion_id
                 WHERE a.plazo != '' AND a.ultima_alerta != 'vencido' AND a.estado != 'completado'
                   AND a.plazo <= ?
-            ''', (manana,)).fetchall()
+            ''', (hasta,)).fetchall()
             return [dict(r) for r in rows]
 
     def marcar_alerta_acuerdo_enviada(self, acuerdo_id, categoria):

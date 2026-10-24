@@ -253,6 +253,8 @@ MDBoxLayout:
                 self.root.ids.bottom_bar.opacity = 0
                 self.root.ids.bottom_bar.size_hint_y = None
                 self.root.ids.bottom_bar.height = 0
+            from utils.alarmas import pedir_permiso_notificaciones
+            pedir_permiso_notificaciones()
             Clock.schedule_interval(self._check_alertas, 60)
             Clock.schedule_once(self._check_alertas, 2)
             for delay in (0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0):
@@ -317,6 +319,20 @@ MDBoxLayout:
             if canceladas:
                 self._mostrar_canceladas(canceladas)
             self.notif_manager.verificar_alertas()
+
+        # En Android el Clock (y con el _check_alertas) se detiene mientras
+        # la app esta en segundo plano: al salir se dejan programadas en
+        # AlarmManager todas las alertas futuras (utils/alarmas.py), y al
+        # volver se revisa enseguida en vez de esperar al siguiente tick.
+        def on_pause(self):
+            try:
+                self.notif_manager.programar_alarmas(forzar=True)
+            except Exception:
+                pass
+            return True
+
+        def on_resume(self):
+            Clock.schedule_once(self._check_alertas, 0.5)
 
         def _mostrar_canceladas(self, asuntos):
             lista = '\n'.join(f'• {a}' for a in asuntos)

@@ -63,6 +63,8 @@ contra el codigo actual del recipe python3):
 5. AndroidManifest.tmpl.xml: inserta <queries> TTS_SERVICE antes de
    <application> para que TextToSpeech vea los motores de voz instalados
    (package visibility, targetSdk >= 30). Alertas de voz en Android.
+6. AndroidManifest.tmpl.xml: inserta el <receiver> de AlarmaReceiver
+   (java_src/) para las alertas con la app cerrada. Ver utils/alarmas.py.
 """
 
 import os
@@ -292,4 +294,34 @@ if os.path.exists(manifest_tmpl_path):
         print('AndroidManifest.tmpl.xml parcheado: <queries> de TTS_SERVICE insertado')
     else:
         print('WARN: etiqueta "<application" no encontrada en AndroidManifest.tmpl.xml '
+              '(revisar si el template de p4a cambio)')
+
+# --- 6. AndroidManifest.tmpl.xml: <receiver> de alarmas (alertas con la app cerrada) ---
+# java_src/com/eliasgt/agenda/alarmas/AlarmaReceiver.java (via android.add_src
+# en buildozer.spec) recibe las alarmas de AlarmManager programadas por
+# utils/alarmas.py y muestra la notificacion sin necesitar Python. Mismo motivo
+# que el parche #4 para ir en el template: <receiver> es hijo de <application>.
+# exported=true solo por BOOT_COMPLETED/MY_PACKAGE_REPLACED (los manda el
+# sistema; reiniciar el telefono o actualizar la app borra todas las alarmas);
+# las alarmas propias llegan con un Intent explicito.
+if os.path.exists(manifest_tmpl_path):
+    c = open(manifest_tmpl_path).read()
+    marker = '    </application>'
+    RECEIVER_XML = '''        <receiver
+            android:name="com.eliasgt.agenda.alarmas.AlarmaReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+'''
+    if 'com.eliasgt.agenda.alarmas.AlarmaReceiver' in c:
+        print('AndroidManifest.tmpl.xml: ya tiene el <receiver> de alarmas')
+    elif marker in c:
+        c = c.replace(marker, RECEIVER_XML + marker, 1)
+        open(manifest_tmpl_path, 'w').write(c)
+        print('AndroidManifest.tmpl.xml parcheado: <receiver> de alarmas insertado')
+    else:
+        print('WARN: marcador "</application>" no encontrado en AndroidManifest.tmpl.xml '
               '(revisar si el template de p4a cambio)')

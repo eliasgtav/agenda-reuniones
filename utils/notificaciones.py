@@ -200,23 +200,79 @@ MENSAJES = {
 }
 
 
+# Alarmas de Android (utils/alarmas.py) para avisar con la app cerrada. Con
+# la app abierta el aviso de plazo de un acuerdo salta en cuanto cambia el
+# dia; cerrada no hay chequeo, asi que la alarma suena a esta hora fija.
+HORA_AVISO_ACUERDO = 9
+CATEGORIAS_ACUERDO = ('manana', 'hoy', 'vencido')
+# Al volver a la app, una alarma que ya mostro su notificacion con la app
+# cerrada se dice en voz solo si sono hace poco (p.ej. se toco la
+# notificacion); "reunion en 10 minutos" una hora despues ya no sirve.
+VOZ_DISPARADA_MAX_S = 10 * 60
+
+
+# Clave (para reconocer la alarma al volver) y request code de Android
+# (unico por alarma: pares reuniones, impares acuerdos).
+def _clave_reunion(alerta_id):
+    return f'r{alerta_id}', 2 * alerta_id
+
+
+def _clave_acuerdo(acuerdo_id, categoria):
+    k = CATEGORIAS_ACUERDO.index(categoria)
+    return f'c{acuerdo_id}:{categoria}', 2 * (acuerdo_id * 3 + k) + 1
+
+
+def _saludo_perezoso():
+    # _saludo_usuario() hace un cargar_config() (leer + desencriptar
+    # agenda_config.json de disco), asi que solo vale la pena calcularlo la
+    # primera vez que de verdad hay algo que avisar, no en cada tick.
+    cache = {}
+
+    def saludo():
+        if 'v' not in cache:
+            cache['v'] = _saludo_usuario()
+        return cache['v']
+    return saludo
+
+
+def _textos_reunion(alerta, saludo):
+    asunto = alerta['asunto']
+    cuando = MENSAJES[alerta['tipo']]
+    return (
+        f'Reunión próxima — {cuando}',
+        f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}',
+        f'{saludo}tiene una reunión {cuando}. Asunto: {asunto}.',
+    )
+
+
+def _textos_acuerdo(acuerdo, categoria, saludo):
+    texto = acuerdo['texto']
+    reunion = acuerdo['reunion_asunto']
+    responsable = acuerdo.get('responsable', '')
+    quien = f' asignado a {responsable}' if responsable else ''
+    estado, voz = {
+        'vencido': ('VENCIDO', 'acuerdo vencido'),
+        'hoy': ('vence HOY', 'acuerdo que vence hoy'),
+        'manana': ('vence mañana', 'acuerdo que vence mañana'),
+    }[categoria]
+    return (
+        f'Acuerdo {estado}',
+        f'{texto}\nReunión: {reunion}\nPlazo: {acuerdo["plazo"]}',
+        f'{saludo}{voz}{quien} de la reunión {reunion}: {texto}',
+    )
+
+
 class NotificacionesManager:
     def __init__(self, db):
         self.db = db
 
     def verificar_alertas(self, *args):
         # main.py llama a esto cada 60s sin parar mientras la app este
-        # abierta -- _saludo_usuario() hace un cargar_config() (leer +
-        # desencriptar agenda_config.json de disco), asi que solo vale la
-        # pena calcularlo la primera vez que de verdad hay algo que avisar
-        # en este tick, no en cada uno aunque no haya alertas pendientes.
-        saludo_cache = {}
-
-        def saludo():
-            if 'v' not in saludo_cache:
-                saludo_cache['v'] = _saludo_usuario()
-            return saludo_cache['v']
-
+        # abierta, y al volver a ella.
+        saludo = _saludo_perezoso()
+        # Primero lo que ya aviso Android con la app cerrada, para que el
+        # chequeo de abajo no lo repita.
+        self._procesar_disparadas()
         for alerta in self.db.alertas_pendientes():
             minutos = _minutos_para_reunion(alerta['fecha'], alerta['hora'])
             if minutos is None:
@@ -226,58 +282,94 @@ class NotificacionesManager:
                 continue
             lo, hi = UMBRALES[tipo]
             if lo < minutos <= hi:
-                asunto = alerta['asunto']
-                cuando = MENSAJES[tipo]
-                _avisar(
-                    f'Reunión próxima — {cuando}',
-                    f'{asunto} ({alerta["hora"]}) — {alerta.get("lugar","")}',
-                    f'{saludo()}tiene una reunión {cuando}. Asunto: {asunto}.',
-                )
+                _avisar(*_textos_reunion(alerta, saludo()))
                 self.db.marcar_alerta_enviada(alerta['id'])
-        self.verificar_plazos_acuerdos()
+        self.verificar_plazos_acuerdos(saludo)
+        # Lo recien avisado aqui sale de la lista y su alarma se cancela
+        # antes de sonar; tambien recoge reuniones/acuerdos nuevos, editados
+        # o borrados en el ultimo minuto.
+        self.programar_alarmas()
 
-    def verificar_plazos_acuerdos(self):
+    def verificar_plazos_acuerdos(self, saludo):
         # Cada acuerdo avisa hasta 3 veces conforme se acerca su plazo
         # (manana -> hoy -> vencido), nunca la misma categoria dos veces --
         # antes se marcaba "ya avisado" tras la PRIMERA notificacion sin
         # importar cual, asi que un acuerdo que avisaba "vence manana" nunca
         # volvia a avisar cuando de verdad vencia. `ultima_alerta` guarda que
         # categoria fue la ultima notificada; "vencido" es terminal.
-        from datetime import datetime
         hoy = datetime.now().strftime('%Y-%m-%d')
-        saludo_cache = {}
-
-        def saludo():
-            if 'v' not in saludo_cache:
-                saludo_cache['v'] = _saludo_usuario()
-            return saludo_cache['v']
-
         for acuerdo in self.db.acuerdos_con_plazo_pendientes():
             plazo = acuerdo['plazo']
-            texto = acuerdo['texto']
-            reunion = acuerdo['reunion_asunto']
-            responsable = acuerdo.get('responsable', '')
-            quien = f' asignado a {responsable}' if responsable else ''
-
             if plazo < hoy:
                 categoria = 'vencido'
-                estado = 'VENCIDO'
-                voz = f'{saludo()}acuerdo vencido{quien} de la reunión {reunion}: {texto}'
             elif plazo == hoy:
                 categoria = 'hoy'
-                estado = 'vence HOY'
-                voz = f'{saludo()}acuerdo que vence hoy{quien} de la reunión {reunion}: {texto}'
             else:
                 categoria = 'manana'
-                estado = 'vence mañana'
-                voz = f'{saludo()}acuerdo que vence mañana{quien} de la reunión {reunion}: {texto}'
 
             if categoria == acuerdo.get('ultima_alerta', ''):
                 continue
 
-            _avisar(
-                f'Acuerdo {estado}',
-                f'{texto}\nReunión: {reunion}\nPlazo: {plazo}',
-                voz,
-            )
+            _avisar(*_textos_acuerdo(acuerdo, categoria, saludo()))
             self.db.marcar_alerta_acuerdo_enviada(acuerdo['id'], categoria)
+
+    def _procesar_disparadas(self):
+        import time
+        from utils import alarmas
+        for d in alarmas.consumir_disparadas():
+            clave = d['clave']
+            try:
+                if clave.startswith('r'):
+                    self.db.marcar_alerta_enviada(int(clave[1:]))
+                elif clave.startswith('c'):
+                    acuerdo_id, categoria = clave[1:].split(':')
+                    self.db.marcar_alerta_acuerdo_enviada(int(acuerdo_id), categoria)
+            except ValueError:
+                continue
+            # La notificacion ya la mostro Android; solo falta la voz.
+            if d.get('v') and time.time() - d['t'] < VOZ_DISPARADA_MAX_S:
+                _hablar(d['v'])
+
+    def programar_alarmas(self, forzar=False):
+        if platform != 'android':
+            return
+        from utils import alarmas
+        ahora = datetime.now()
+        saludo = _saludo_perezoso()
+        lista = []
+
+        for alerta in self.db.alertas_pendientes():
+            tipo = alerta['tipo']
+            if tipo not in UMBRALES:
+                continue
+            try:
+                cuando = datetime.strptime(
+                    f'{alerta["fecha"]} {alerta["hora"]}', '%Y-%m-%d %H:%M'
+                ) - timedelta(minutes=UMBRALES[tipo][1])
+            except ValueError:
+                continue
+            if cuando <= ahora:
+                continue
+            clave, rc = _clave_reunion(alerta['id'])
+            ti, tx, v = _textos_reunion(alerta, saludo())
+            lista.append(dict(clave=clave, rc=rc, t=cuando.timestamp(), ti=ti, tx=tx, v=v))
+
+        for acuerdo in self.db.acuerdos_con_plazo_pendientes(solo_proximos=False):
+            try:
+                plazo = datetime.strptime(acuerdo['plazo'], '%Y-%m-%d')
+            except ValueError:
+                continue
+            ultima = acuerdo.get('ultima_alerta', '')
+            ya = CATEGORIAS_ACUERDO.index(ultima) if ultima in CATEGORIAS_ACUERDO else -1
+            # manana: dia antes del plazo; hoy: el plazo; vencido: dia despues.
+            for k, categoria in enumerate(CATEGORIAS_ACUERDO):
+                if k <= ya:
+                    continue
+                cuando = (plazo + timedelta(days=k - 1)).replace(hour=HORA_AVISO_ACUERDO)
+                if cuando <= ahora:
+                    continue
+                clave, rc = _clave_acuerdo(acuerdo['id'], categoria)
+                ti, tx, v = _textos_acuerdo(acuerdo, categoria, saludo())
+                lista.append(dict(clave=clave, rc=rc, t=cuando.timestamp(), ti=ti, tx=tx, v=v))
+
+        alarmas.sincronizar(lista, forzar=forzar)
