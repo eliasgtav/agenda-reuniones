@@ -230,7 +230,7 @@ Builder.load_string('''
                 spacing: '8dp'
 
                 MDSwitch:
-                    id: sw_30min
+                    id: sw_10min
                     active: True
                 MDLabel:
                     text: "10 min antes"
@@ -242,7 +242,7 @@ Builder.load_string('''
                 spacing: '8dp'
 
                 MDSwitch:
-                    id: sw_1hora
+                    id: sw_15min
                     active: True
                 MDLabel:
                     text: "15 min antes"
@@ -254,7 +254,7 @@ Builder.load_string('''
                 spacing: '8dp'
 
                 MDSwitch:
-                    id: sw_1dia
+                    id: sw_30min
                     active: True
                 MDLabel:
                     text: "30 min antes"
@@ -405,12 +405,12 @@ class NuevaReunionScreen(ScrollArribaMixin, MDScreen):
         lugar = self.ids.lugar_field.text.strip()
 
         alertas = []
+        if self.ids.sw_10min.active:
+            alertas.append('10min')
+        if self.ids.sw_15min.active:
+            alertas.append('15min')
         if self.ids.sw_30min.active:
             alertas.append('30min')
-        if self.ids.sw_1hora.active:
-            alertas.append('1hora')
-        if self.ids.sw_1dia.active:
-            alertas.append('1dia')
 
         app = App.get_running_app()
         db = app.db

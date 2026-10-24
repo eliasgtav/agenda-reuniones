@@ -133,6 +133,21 @@ class Database:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
                     pass
+            # v1: los tipos de alerta se llamaban '30min'/'1hora'/'1dia'
+            # aunque la pantalla siempre dijo 10/15/30 min antes. Un solo
+            # UPDATE con CASE (no tres seguidos: '1dia'->'30min' chocaria con
+            # el '30min' viejo) y gateado por user_version, porque correrlo
+            # dos veces convertiria los '30min' nuevos en '10min'. Tambien
+            # cubre un backup viejo importado (user_version 0 al reabrir).
+            if conn.execute('PRAGMA user_version').fetchone()[0] < 1:
+                conn.execute('''
+                    UPDATE alertas SET tipo = CASE tipo
+                        WHEN '30min' THEN '10min'
+                        WHEN '1hora' THEN '15min'
+                        WHEN '1dia'  THEN '30min'
+                        ELSE tipo END
+                ''')
+                conn.execute('PRAGMA user_version = 1')
 
     # ── Reuniones ──────────────────────────────────────────────────────────────
 

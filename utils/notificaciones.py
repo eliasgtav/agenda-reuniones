@@ -182,16 +182,21 @@ def _avisar(titulo_push, msg_push, texto_voz):
     _hablar(texto_voz)
 
 
+# (lo, hi]: cada alerta suena en el primer tick de 60s en que faltan `hi`
+# minutos o menos (o sea entre hi-1 y hi), igual que dice la pantalla.
+# Antes la ventana era hi±5, asi que con la app abierta "10 min antes"
+# sonaba a los 15. `lo` deja 5 min de gracia si la app se abre tarde, y
+# es exclusivo para que dos ventanas contiguas no suenen juntas en el borde.
 UMBRALES = {
-    '30min': (5, 15),
-    '1hora': (10, 20),
-    '1dia':  (25, 35),
+    '10min': (5, 10),
+    '15min': (10, 15),
+    '30min': (25, 30),
 }
 
 MENSAJES = {
-    '30min': 'en 10 minutos',
-    '1hora': 'en 15 minutos',
-    '1dia':  'en 30 minutos',
+    '10min': 'en 10 minutos',
+    '15min': 'en 15 minutos',
+    '30min': 'en 30 minutos',
 }
 
 
@@ -220,7 +225,7 @@ class NotificacionesManager:
             if tipo not in UMBRALES:
                 continue
             lo, hi = UMBRALES[tipo]
-            if lo <= minutos <= hi:
+            if lo < minutos <= hi:
                 asunto = alerta['asunto']
                 cuando = MENSAJES[tipo]
                 _avisar(

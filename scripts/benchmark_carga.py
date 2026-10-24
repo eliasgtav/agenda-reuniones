@@ -133,7 +133,7 @@ def poblar(db, n_reuniones, offset_id=0):
                 ))
             for _ in range(random.randint(0, 1)):
                 archivos.append((rid, 'documento.pdf', f'/adjuntos/{rid}_doc.pdf', 'documento'))
-            for tipo in random.sample(['30min', '1h', '1dia'], k=random.randint(0, 2)):
+            for tipo in random.sample(['10min', '15min', '30min'], k=random.randint(0, 2)):
                 alertas.append((rid, tipo))
 
         if participantes:

@@ -306,9 +306,12 @@ revisión es periódica, no un temporizador exacto, por eso cada una tiene un pe
 
 | Alerta configurada | Se dispara si faltan entre |
 |---------------------|------------------------------|
-| 10 minutos antes    | 5 y 15 minutos                |
-| 15 minutos antes    | 10 y 20 minutos                |
-| 30 minutos antes    | 25 y 35 minutos                |
+| 10 minutos antes    | 10 y 5 minutos                |
+| 15 minutos antes    | 15 y 10 minutos               |
+| 30 minutos antes    | 30 y 25 minutos               |
+
+Con la app abierta, cada alerta suena justo al llegar a su tiempo (a los 10, 15 o 30
+minutos). Si la app se abre un poco tarde, todavía avisa hasta 5 minutos después.
 
 Cada alerta se envía **una sola vez** por reunión.
 
