@@ -323,6 +323,13 @@ Cada alerta llega de dos formas al mismo tiempo:
 1. **Notificación del sistema** (visual, con una duración de 15 segundos).
 2. **Alerta hablada**, en español, mencionando el nombre del usuario y el motivo del aviso.
 
+**Con la app cerrada o en segundo plano (Android)**: las alertas llegan igual, como
+notificación con sonido y vibración, aunque el celular esté bloqueado o se haya reiniciado.
+Las de reunión llegan a los 10, 15 o 30 minutos; las de plazo de acuerdo a las 9:00 del
+día que corresponda. Al tocar la notificación se abre la app y, si sonó hace menos de 10
+minutos, también dice la alerta en voz alta. La primera vez que se abre la app pide permiso
+para mostrar notificaciones: hay que aceptarlo, o no llega ningún aviso.
+
 ---
 
 ## 6. Funciones disponibles en varias pantallas
